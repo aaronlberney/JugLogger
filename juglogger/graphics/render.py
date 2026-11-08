@@ -151,32 +151,37 @@ def pyramid_rows(summary: SessionSummary) -> list[tuple[str, int]]:
 
 def draw_pyramid(draw: ImageDraw.ImageDraw, y: float, rows: list[tuple[str, int]], theme: Theme,
                  max_width: float, block: float, gap: float, labels: bool) -> float:
-    """Centered stacks of red blocks, hardest grade on top. Returns the bottom y."""
+    """Rows of slim red blocks, hardest grade on top. Every row starts on the same
+    left edge, and the chart as a whole is centered. `block` is the block width;
+    blocks are half as tall as they are wide. Returns the bottom y."""
     if not rows:
         return y
     widest = max(count for _, count in rows) or 1
     block = min(block, (max_width - gap * (widest - 1)) / widest)
-    radius = u(block * 0.18)
-    row_h = block + gap * 1.6
-    label_font = font("semibold", block * 0.62)
+    height = block * 0.5
+    row_gap = gap * 1.6
+    radius = u(min(height * 0.3, 4))
+    label_font = font("semibold", height * 1.05)
+    label_w = max(label_font.getlength(grade) for grade, _ in rows) / S if labels else 0
+    gutter = block * 0.4 if labels else 0
     widest_px = widest * block + (widest - 1) * gap
-    label_x = CX - u(widest_px / 2) - u(block * 0.55)
+    left = CX - u((label_w + gutter + widest_px) / 2)
+    start = left + u(label_w + gutter)          # the shared starting line
     for grade, count in rows:
         if labels:
-            draw_text(draw, label_x, y + (u(block) - cap_height(label_font)) / 2, grade,
+            draw_text(draw, start - u(gutter), y + (u(height) - cap_height(label_font)) / 2, grade,
                       label_font, theme.ink(0.95 if count else 0.4), align="right")
         if count:
-            row_w = count * block + (count - 1) * gap
-            x = CX - u(row_w / 2)
+            x = start
             for _ in range(count):
-                draw.rounded_rectangle((x, y, x + u(block), y + u(block)), radius=radius, fill=ACCENT)
+                draw.rounded_rectangle((x, y, x + u(block), y + u(height)), radius=radius, fill=ACCENT)
                 x += u(block + gap)
         else:
-            draw.rounded_rectangle((CX - u(block * 0.4), y + u(block / 2) - u(2),
-                                    CX + u(block * 0.4), y + u(block / 2) + u(2)),
-                                   radius=u(2), fill=theme.ink(0.35))
-        y += u(row_h)
-    return y - u(gap * 1.6)
+            mid = y + u(height / 2)
+            draw.rounded_rectangle((start, mid - u(1.5), start + u(block * 0.5), mid + u(1.5)),
+                                   radius=u(1.5), fill=theme.ink(0.35))
+        y += u(height + row_gap)
+    return y - u(row_gap)
 
 
 def tries_label(climb: ClimbResult) -> str:
@@ -222,7 +227,7 @@ def render_stats(summary: SessionSummary, theme: Theme, **_) -> Image.Image:
     if rows:
         y += u(8)
         rows = [row for row in rows if row[1]]
-        y = draw_pyramid(draw, y, rows, theme, max_width=300, block=30, gap=8, labels=False)
+        y = draw_pyramid(draw, y, rows, theme, max_width=320, block=34, gap=4, labels=False)
         y += u(72)
     else:
         y += u(16)
@@ -238,7 +243,7 @@ def render_pyramid(summary: SessionSummary, theme: Theme, **_) -> Image.Image:
     y += u(80)
     rows = pyramid_rows(summary)
     if rows:
-        y = draw_pyramid(draw, y, rows, theme, max_width=600, block=78, gap=12, labels=True)
+        y = draw_pyramid(draw, y, rows, theme, max_width=640, block=84, gap=6, labels=True)
     else:
         draw_text(draw, CX, y, "No sends yet", font("medium", 44), theme.ink(0.6))
         y += cap_height(font("medium", 44))
