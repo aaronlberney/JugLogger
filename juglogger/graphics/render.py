@@ -229,7 +229,7 @@ def render_stats(summary: SessionSummary, theme: Theme, **_) -> Image.Image:
     if rows:
         y += u(8)
         rows = [row for row in rows if row[1]]
-        y = draw_pyramid(draw, y, rows, theme, max_width=320, block=34, gap=4, labels=False)
+        y = draw_pyramid(draw, y, rows, theme, max_width=320, block=34, gap=4, labels=True)
         y += u(72)
     else:
         y += u(16)
