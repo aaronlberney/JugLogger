@@ -65,7 +65,9 @@ class BoardRenderer:
         radius = RING_RADIUS * median_spacing(np.asarray(centers, float))
         return image, calibration, radius
 
-    def render(self, climb_uuid: str, is_mirror: bool, width: int, theme: str = "light") -> Image.Image | None:
+    def render(self, climb_uuid: str, is_mirror: bool, width: int, theme: str = "light",
+               lit_only: bool = False) -> Image.Image | None:
+        """lit_only=True drops every hold that isn't part of the climb."""
         climb = self.db.climb(climb_uuid)
         if not climb or climb.layout_id is None:
             return None
@@ -89,7 +91,8 @@ class BoardRenderer:
 
         # Fade every hold, then bring the lit holds back at full strength.
         dimmed = board.copy()
-        dimmed.putalpha(board.getchannel("A").point(lambda a: int(a * DIM_ALPHA)))
+        dim = 0.0 if lit_only else DIM_ALPHA
+        dimmed.putalpha(board.getchannel("A").point(lambda a: int(a * dim)))
         radius = ring_px * scale
         lit_mask = Image.new("L", board.size, 0)
         draw_mask = ImageDraw.Draw(lit_mask)

@@ -11,7 +11,7 @@ const prefs = loadPrefs();
 // ---------- helpers ----------
 
 function loadPrefs() {
-  const defaults = { theme: "light", crop: true, backdrop: "gradient" };
+  const defaults = { theme: "light", crop: true, backdrop: "gradient", holds: "all" };
   try { return { ...defaults, ...JSON.parse(localStorage.getItem("juglogger.prefs") || "{}"), photo: null }; }
   catch { return { ...defaults, photo: null }; }
 }
@@ -301,6 +301,7 @@ async function renderSession(id, refresh = true) {
             </div>
             <div class="preview"><span class="spin">rendering…</span><img alt="${esc(g.title)} overlay" hidden></div>
             ${g.kind === "board" && s.climbs.length ? `
+              <div class="seg" data-pref="holds"><button data-v="all">All holds</button><button data-v="lit">Lit only</button></div>
               <select data-climb>
                 ${[...s.climbs].sort((a, b) => (b.sent - a.sent)).map((c) => `<option value="${esc(c.climb_uuid)}" ${hardest && c.climb_uuid === hardest.climb_uuid ? "selected" : ""}>${esc(c.name)} · ${esc(c.grade || "—")}${c.sent ? "" : " (project)"}</option>`).join("")}
               </select>` : ""}
@@ -326,7 +327,7 @@ async function renderSession(id, refresh = true) {
   const gallery = document.getElementById("gallery");
   const url = (tile, extra = "") => {
     const climb = tile.querySelector("[data-climb]")?.value;
-    return `/api/sessions/${id}/graphics/${tile.dataset.kind}.png?theme=${prefs.theme}&crop=${prefs.crop}${climb ? `&climb=${encodeURIComponent(climb)}` : ""}&v=${version}${extra}`;
+    return `/api/sessions/${id}/graphics/${tile.dataset.kind}.png?theme=${prefs.theme}&crop=${prefs.crop}${tile.dataset.kind === "board" ? `&holds=${prefs.holds}` : ""}${climb ? `&climb=${encodeURIComponent(climb)}` : ""}&v=${version}${extra}`;
   };
   const applyBackdrop = () => {
     const map = {

@@ -6,7 +6,7 @@ Strava for board climbing. Start a timer, climb on the Tension Board 2 and log y
 
 ## Graphics
 
-All are transparent PNGs with white (or black) type and a red accent:
+All are transparent PNGs with white (or black) type and a dark red accent:
 
 | Graphic | What's on it |
 |---|---|

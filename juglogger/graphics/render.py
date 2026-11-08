@@ -21,7 +21,7 @@ from .board import BoardRenderer
 S = 2                          # supersampling factor
 WIDTH, HEIGHT = 1080, 1920     # Instagram story
 CX = WIDTH * S // 2
-RED = (255, 59, 48)              # accent: #FF3B30
+RED = (214, 40, 40)              # accent: #D62828
 FONTS = Path(__file__).resolve().parent.parent / "fonts"
 APP_NAME = "JUGLOGGER"
 
@@ -299,7 +299,7 @@ def render_list(summary: SessionSummary, theme: Theme, **_) -> Image.Image:
 
 
 def render_board(summary: SessionSummary, theme: Theme, board: BoardRenderer | None = None,
-                 climb_uuid: str | None = None, **_) -> Image.Image:
+                 climb_uuid: str | None = None, lit_only: bool = False, **_) -> Image.Image:
     climb = None
     if climb_uuid:
         climb = next((c for c in summary.climbs if c.climb_uuid == climb_uuid), None)
@@ -339,7 +339,8 @@ def render_board(summary: SessionSummary, theme: Theme, board: BoardRenderer | N
     y += cap_height(meta_font) + u(64)
 
     if board:
-        board_image = board.render(climb.climb_uuid, climb.is_mirror, width=u(900), theme=theme.name)
+        board_image = board.render(climb.climb_uuid, climb.is_mirror, width=u(900), theme=theme.name,
+                                   lit_only=lit_only)
         if board_image:
             image.alpha_composite(board_image, (CX - board_image.width // 2, round(y)))
             y += board_image.height + u(72)
@@ -366,11 +367,11 @@ GRAPHICS = {
 
 def render_graphic(kind: str, summary: SessionSummary, theme: str = "light",
                    crop: bool = True, board: BoardRenderer | None = None,
-                   climb_uuid: str | None = None) -> bytes:
+                   climb_uuid: str | None = None, lit_only: bool = False) -> bytes:
     """Returns PNG bytes. crop=True gives a sticker cut tight around the content;
     crop=False gives a full 1080x1920 story frame with the content centered."""
     _, renderer = GRAPHICS[kind]
-    image = renderer(summary, THEMES[theme], board=board, climb_uuid=climb_uuid)
+    image = renderer(summary, THEMES[theme], board=board, climb_uuid=climb_uuid, lit_only=lit_only)
     image = image.resize((image.width // S, image.height // S), Image.LANCZOS)
     bbox = image.getchannel("A").getbbox() or (0, 0, 1, 1)
     content = image.crop(bbox)

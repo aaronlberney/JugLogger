@@ -244,12 +244,14 @@ def create_app(data_dir: Path | None = None, demo_mode: bool | None = None) -> F
 
     @app.get("/api/sessions/{session_id}/graphics/{kind}.png")
     def graphic(session_id: int, kind: str, theme: str = Query("light", pattern="^(light|dark)$"),
-                crop: bool = True, climb: str | None = None, download: bool = False):
+                crop: bool = True, climb: str | None = None, download: bool = False,
+                holds: str = Query("all", pattern="^(all|lit)$")):
         if kind not in GRAPHICS:
             raise HTTPException(404, "No such graphic")
         session = get_session(session_id)
         png = render_graphic(kind, ctx.summary(session), theme=theme, crop=crop,
-                             board=ctx.renderer() if kind == "board" else None, climb_uuid=climb)
+                             board=ctx.renderer() if kind == "board" else None, climb_uuid=climb,
+                             lit_only=holds == "lit")
         headers = {"Cache-Control": "no-store"}
         if download:
             headers["Content-Disposition"] = f'attachment; filename="juglogger-{session_id}-{kind}.png"'
