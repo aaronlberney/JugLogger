@@ -1,0 +1,28 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "juglogger"
+version = "0.1.0"
+description = "Strava-style session tracking and share graphics for the Tension Board 2"
+requires-python = ">=3.10"
+dependencies = [
+    "boardlib>=0.16",
+    "fastapi>=0.110",
+    "uvicorn>=0.29",
+    "pillow>=10",
+    "requests>=2.31",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "httpx>=0.27"]
+
+[project.scripts]
+juglogger = "juglogger.__main__:main"
+
+[tool.setuptools.packages.find]
+include = ["juglogger*"]
+
+[tool.setuptools.package-data]
+juglogger = ["fonts/*", "web/*"]

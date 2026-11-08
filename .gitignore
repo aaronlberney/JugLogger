@@ -1,0 +1,7 @@
+# Local data: board database, hold images, your sessions and Tension token
+data/
+__pycache__/
+*.pyc
+.venv/
+*.egg-info/
+.pytest_cache/
