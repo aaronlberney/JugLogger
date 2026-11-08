@@ -44,13 +44,15 @@ ACCENT = RED + (255,)
 
 @lru_cache(maxsize=64)
 def font(weight: str, size: float) -> ImageFont.FreeTypeFont:
+    # Archivo, as on aaronberney.com: condensed for the big type, regular width
+    # for labels and small text.
     files = {
-        "medium": "Outfit_500Medium.ttf",
-        "semibold": "Outfit_600SemiBold.ttf",
-        "bold": "Outfit_700Bold.ttf",
-        "black": "Outfit_800ExtraBold.ttf",
-        "mono": "JetBrainsMono_500Medium.ttf",
-        "mono-bold": "JetBrainsMono_700Bold.ttf",
+        "medium": "Archivo_500Medium.ttf",              # labels
+        "semibold": "ArchivoCondensed-Medium.ttf",      # big values, climb names
+        "bold": "ArchivoCondensed-SemiBold.ttf",        # grades
+        "black": "ArchivoCondensed-Bold.ttf",           # wordmark
+        "mono": "Archivo_400Regular.ttf",               # small meta lines
+        "mono-bold": "Archivo_600SemiBold.ttf",
     }
     return ImageFont.truetype(str(FONTS / files[weight]), round(size * S))
 
@@ -106,8 +108,8 @@ def draw_logo(image: Image.Image, y: float, theme: Theme, scale: float = 1.0) ->
     """The JugLogger mark (a red jug: a U-shaped hold) next to the wordmark,
     centered. Returns the bottom y."""
     draw = ImageDraw.Draw(image)
-    f = font("black", 50 * scale)
-    tracking = 1.5 * scale
+    f = font("black", 62 * scale)
+    tracking = 2.5 * scale
     word_w = text_width(APP_NAME, f, tracking)
     cap = cap_height(f)
     mark_w = cap * 1.75
@@ -135,7 +137,7 @@ def draw_jug(image: Image.Image, left: float, top: float, width: float, height: 
 
 
 def draw_stat(draw: ImageDraw.ImageDraw, y: float, label: str, value: str, theme: Theme,
-              value_size: float = 112, accent_value: bool = False) -> float:
+              value_size: float = 150, accent_value: bool = False) -> float:
     """Strava-style stat: small label above a big value. Returns the bottom y."""
     label_font = font("medium", 40)
     draw_text(draw, CX, y, label, label_font, theme.ink(0.95))
@@ -239,11 +241,11 @@ def render_pyramid(summary: SessionSummary, theme: Theme, **_) -> Image.Image:
     image = _canvas()
     draw = ImageDraw.Draw(image)
     y = draw_stat(draw, u(100), "Send Pyramid", f"{summary.send_count} {'send' if summary.send_count == 1 else 'sends'}",
-                  theme, value_size=96)
+                  theme, value_size=128)
     y += u(80)
     rows = pyramid_rows(summary)
     if rows:
-        y = draw_pyramid(draw, y, rows, theme, max_width=640, block=84, gap=6, labels=True)
+        y = draw_pyramid(draw, y, rows, theme, max_width=700, block=104, gap=6, labels=True)
     else:
         draw_text(draw, CX, y, "No sends yet", font("medium", 44), theme.ink(0.6))
         y += cap_height(font("medium", 44))
@@ -275,9 +277,9 @@ def render_list(summary: SessionSummary, theme: Theme, **_) -> Image.Image:
     column = 840
     left, right = CX - u(column / 2), CX + u(column / 2)
     meta_font = font("mono", 26)
-    grade_font = font("bold", 50)
+    grade_font = font("bold", 62)
     for index, climb in enumerate(shown):
-        name, name_font = fit(climb.name, "semibold", 48, column - 150, 36)
+        name, name_font = fit(climb.name, "semibold", 60, column - 150, 44)
         draw_text(draw, left, y, name, name_font, theme.ink(1 if climb.sent else 0.7), align="left")
         grade = climb.grade or "—"
         draw_text(draw, right, y, grade, grade_font, ACCENT if climb.sent else theme.ink(0.45), align="right")
@@ -328,7 +330,7 @@ def render_board(summary: SessionSummary, theme: Theme, board: BoardRenderer | N
     y = u(100)
     draw_text(draw, CX, y, label, label_font, theme.ink(0.95))
     y += cap_height(label_font) + u(24)
-    name, name_font = fit(climb.name, "semibold", 96, 940, 56)
+    name, name_font = fit(climb.name, "semibold", 128, 940, 72)
     draw_text(draw, CX, y, name, name_font, theme.ink())
     y += cap_height(name_font) + u(36)
 

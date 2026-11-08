@@ -1,8 +1,11 @@
-@font-face { font-family: "Outfit"; font-weight: 500; src: url("/fonts/Outfit_500Medium.ttf"); }
-@font-face { font-family: "Outfit"; font-weight: 600; src: url("/fonts/Outfit_600SemiBold.ttf"); }
-@font-face { font-family: "Outfit"; font-weight: 700; src: url("/fonts/Outfit_700Bold.ttf"); }
-@font-face { font-family: "Outfit"; font-weight: 800; src: url("/fonts/Outfit_800ExtraBold.ttf"); }
-@font-face { font-family: "JetBrains Mono"; font-weight: 500; src: url("/fonts/JetBrainsMono_500Medium.ttf"); }
+/* Archivo, as on aaronberney.com: condensed for big type, regular width for text. */
+@font-face { font-family: "Archivo"; font-weight: 400; src: url("/fonts/Archivo_400Regular.ttf"); }
+@font-face { font-family: "Archivo"; font-weight: 500; src: url("/fonts/Archivo_500Medium.ttf"); }
+@font-face { font-family: "Archivo"; font-weight: 600; src: url("/fonts/Archivo_600SemiBold.ttf"); }
+@font-face { font-family: "Archivo Condensed"; font-weight: 400; src: url("/fonts/ArchivoCondensed-Regular.ttf"); }
+@font-face { font-family: "Archivo Condensed"; font-weight: 500; src: url("/fonts/ArchivoCondensed-Medium.ttf"); }
+@font-face { font-family: "Archivo Condensed"; font-weight: 600; src: url("/fonts/ArchivoCondensed-SemiBold.ttf"); }
+@font-face { font-family: "Archivo Condensed"; font-weight: 700; src: url("/fonts/ArchivoCondensed-Bold.ttf"); }
 
 :root {
   --bg: #0a0a0b;
@@ -16,8 +19,9 @@
   --accent-soft: rgba(214, 40, 40, 0.16);
   --danger: #ff4d4d;
   --radius: 14px;
-  --sans: "Outfit", ui-sans-serif, system-ui, sans-serif;
-  --mono: "JetBrains Mono", ui-monospace, monospace;
+  --sans: "Archivo", ui-sans-serif, system-ui, sans-serif;
+  --display: "Archivo Condensed", "Archivo", ui-sans-serif, sans-serif;
+  --mono: "Archivo", ui-sans-serif, system-ui, sans-serif;
   color-scheme: dark;
 }
 
@@ -37,7 +41,7 @@ button, input, select { font: inherit; color: inherit; }
   display: flex; align-items: center; justify-content: space-between;
   max-width: 1120px; margin: 0 auto; padding: 22px 24px;
 }
-.logo { display: flex; align-items: center; gap: 10px; font-weight: 800; letter-spacing: 0.06em; font-size: 18px; }
+.logo { display: flex; align-items: center; gap: 10px; font: 700 22px var(--display); letter-spacing: 0.06em; }
 .logo .jug { width: 28px; height: 15px; fill: var(--accent); margin-top: 3px; }
 nav { display: flex; gap: 4px; }
 nav a {
@@ -59,8 +63,8 @@ main { max-width: 1120px; margin: 0 auto; padding: 8px 24px 96px; }
 .eyebrow {
   font: 500 12px var(--mono); letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted);
 }
-h1 { font-weight: 700; font-size: 40px; letter-spacing: -0.02em; margin: 6px 0 0; line-height: 1.05; }
-h2 { font-weight: 600; font-size: 22px; letter-spacing: -0.01em; margin: 0; }
+h1 { font: 500 52px/1 var(--display); letter-spacing: -0.01em; margin: 6px 0 0; }
+h2 { font: 500 26px/1.1 var(--display); margin: 0; }
 .muted { color: var(--muted); }
 .mono { font-family: var(--mono); font-size: 13px; letter-spacing: 0.04em; }
 
@@ -94,7 +98,7 @@ h2 { font-weight: 600; font-size: 22px; letter-spacing: -0.01em; margin: 0; }
 /* Timer */
 .timer-wrap { display: grid; place-items: center; text-align: center; padding: 56px 0 32px; }
 .timer {
-  font: 600 clamp(64px, 14vw, 132px)/1 var(--sans); letter-spacing: -0.03em;
+  font: 500 clamp(80px, 18vw, 176px)/1 var(--display); letter-spacing: -0.01em;
   font-variant-numeric: tabular-nums;
 }
 .timer.idle { color: var(--faint); }
@@ -105,7 +109,7 @@ h2 { font-weight: 600; font-size: 22px; letter-spacing: -0.01em; margin: 0; }
 @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: .25; } }
 .go {
   margin-top: 36px; width: 132px; height: 132px; border-radius: 50%; border: 0; cursor: pointer;
-  background: var(--accent); color: #fff; font: 700 20px var(--sans); letter-spacing: 0.04em;
+  background: var(--accent); color: #fff; font: 600 24px var(--display); letter-spacing: 0.06em;
   box-shadow: 0 0 0 10px var(--accent-soft); transition: transform .15s, box-shadow .2s;
 }
 .go:hover { transform: scale(1.03); box-shadow: 0 0 0 14px var(--accent-soft); }
@@ -115,7 +119,7 @@ h2 { font-weight: 600; font-size: 22px; letter-spacing: -0.01em; margin: 0; }
 .stats { display: grid; grid-template-columns: repeat(5, 1fr); gap: 1px; background: var(--line);
   border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; }
 .stats > div { background: var(--surface); padding: 16px 18px; }
-.stats .v { font-weight: 600; font-size: 30px; letter-spacing: -0.02em; margin-top: 2px; }
+.stats .v { font: 500 38px/1.1 var(--display); margin-top: 2px; }
 .stats .v.accent { color: var(--accent); }
 
 /* Climb list */
@@ -126,7 +130,7 @@ h2 { font-weight: 600; font-size: 22px; letter-spacing: -0.01em; margin: 0; }
 }
 .climb:last-child { border-bottom: 0; }
 .climb .name { font-weight: 600; font-size: 17px; }
-.climb .grade { font-weight: 700; font-size: 20px; color: var(--accent); text-align: right; }
+.climb .grade { font: 600 26px var(--display); color: var(--accent); text-align: right; }
 .climb.project .grade { color: var(--faint); }
 .climb.project .name { color: var(--muted); }
 .climb .meta { grid-column: 1 / -1; font: 500 12px var(--mono); letter-spacing: 0.08em; color: var(--muted); text-transform: uppercase; }
@@ -177,7 +181,7 @@ details summary::-webkit-details-marker { display: none; }
   padding: 16px 20px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface);
 }
 .history a:hover { border-color: #33333a; }
-.history .n { font-weight: 600; font-size: 20px; text-align: right; }
+.history .n { font: 500 26px var(--display); text-align: right; }
 .history .n.accent { color: var(--accent); }
 .history .l { font: 500 11px var(--mono); letter-spacing: 0.12em; color: var(--muted); text-align: right; text-transform: uppercase; }
 
@@ -193,7 +197,7 @@ details summary::-webkit-details-marker { display: none; }
   main { padding: 8px 16px 80px; }
   .stats { grid-template-columns: repeat(2, 1fr); }
   .stats > div:last-child { grid-column: 1 / -1; }
-  h1 { font-size: 30px; }
+  h1 { font-size: 38px; }
   .history a { grid-template-columns: 1fr repeat(2, 70px); }
   .history a .hide-sm { display: none; }
 }

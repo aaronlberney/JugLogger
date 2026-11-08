@@ -104,7 +104,7 @@ juglogger/
                      scripts/build_layout_assets.py
   demo.py            Fake TB2 board and logbook for demo mode and tests
   web/               Single-page UI (plain HTML/CSS/JS, no build step)
-  fonts/             Outfit and JetBrains Mono (SIL Open Font License)
+  fonts/             Archivo + Archivo Condensed (SIL Open Font License)
 tests/
 data/                Your local data (gitignored)
 ```
