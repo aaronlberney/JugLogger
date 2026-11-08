@@ -15,10 +15,10 @@ def board_files(tmp_path_factory):
 
 @pytest.fixture
 def board(board_files):
-    return BoardDB(board_files[0])
+    return BoardDB(board_files)
 
 
 @pytest.fixture
 def climbs(board_files):
-    with sqlite3.connect(board_files[0]) as c:
+    with sqlite3.connect(board_files) as c:
         return [row[0] for row in c.execute("SELECT uuid FROM climbs ORDER BY name")]

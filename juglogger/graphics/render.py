@@ -1,5 +1,5 @@
 """Share graphics. Every graphic is a transparent PNG made to sit on top of a photo
-or video, the way Strava's overlays do: light type, one orange accent, no background.
+or video, the way Strava's overlays do: light type, one red accent, no background.
 
 Everything is drawn at 2x and scaled down at the end for smooth edges.
 """
@@ -21,7 +21,7 @@ from .board import BoardRenderer
 S = 2                          # supersampling factor
 WIDTH, HEIGHT = 1080, 1920     # Instagram story
 CX = WIDTH * S // 2
-ORANGE = (252, 82, 0)
+RED = (255, 59, 48)              # accent: #FF3B30
 FONTS = Path(__file__).resolve().parent.parent / "fonts"
 APP_NAME = "JUGLOGGER"
 
@@ -39,7 +39,7 @@ THEMES = {
     "light": Theme("light", (255, 255, 255)),   # white type, for photos and dark backgrounds
     "dark": Theme("dark", (17, 17, 17)),        # black type, for bright photos
 }
-ACCENT = ORANGE + (255,)
+ACCENT = RED + (255,)
 
 
 @lru_cache(maxsize=64)
@@ -103,7 +103,7 @@ def fit(text: str, weight: str, size: float, max_width: float, min_size: float) 
 # Building blocks
 
 def draw_logo(image: Image.Image, y: float, theme: Theme, scale: float = 1.0) -> float:
-    """The JugLogger mark (an orange jug: a U-shaped hold) next to the wordmark,
+    """The JugLogger mark (a red jug: a U-shaped hold) next to the wordmark,
     centered. Returns the bottom y."""
     draw = ImageDraw.Draw(image)
     f = font("black", 50 * scale)
@@ -151,7 +151,7 @@ def pyramid_rows(summary: SessionSummary) -> list[tuple[str, int]]:
 
 def draw_pyramid(draw: ImageDraw.ImageDraw, y: float, rows: list[tuple[str, int]], theme: Theme,
                  max_width: float, block: float, gap: float, labels: bool) -> float:
-    """Centered stacks of orange blocks, hardest grade on top. Returns the bottom y."""
+    """Centered stacks of red blocks, hardest grade on top. Returns the bottom y."""
     if not rows:
         return y
     widest = max(count for _, count in rows) or 1
@@ -339,7 +339,7 @@ def render_board(summary: SessionSummary, theme: Theme, board: BoardRenderer | N
     y += cap_height(meta_font) + u(64)
 
     if board:
-        board_image = board.render(climb.climb_uuid, climb.is_mirror, width=u(820), fallback_color=theme.fg)
+        board_image = board.render(climb.climb_uuid, climb.is_mirror, width=u(900), theme=theme.name)
         if board_image:
             image.alpha_composite(board_image, (CX - board_image.width // 2, round(y)))
             y += board_image.height + u(72)

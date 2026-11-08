@@ -33,7 +33,6 @@ class Context:
     grade_source: str = "logged"
     store: Store = field(init=False)
     board_db_path: Path = field(init=False)
-    images_dir: Path = field(init=False)
     last_fetch: float = 0.0
     last_error: str | None = None
     lock: threading.Lock = field(default_factory=threading.Lock)
@@ -41,12 +40,12 @@ class Context:
     def __post_init__(self):
         self.store = Store(self.data_dir / ("demo.sqlite3" if self.demo else "juglogger.sqlite3"))
         if self.demo:
-            self.board_db_path, self.images_dir = demo.build(self.data_dir)
+            self.board_db_path = demo.build(self.data_dir)
             if not self.store.account(BOARD):
                 self.store.save_account(BOARD, "demo", 0, "demo-token")
         else:
             self.board_db_path = self.data_dir / "tension.sqlite3"
-            self.images_dir = self.data_dir / "tension-images"
+        self._renderer = None
 
     @property
     def board_ready(self) -> bool:
@@ -58,7 +57,10 @@ class Context:
         return BoardDB(self.board_db_path)
 
     def renderer(self) -> BoardRenderer:
-        return BoardRenderer(self.board(), self.images_dir if self.images_dir.exists() else None)
+        # Kept between requests so each layout is calibrated only once.
+        if self._renderer is None:
+            self._renderer = BoardRenderer(self.board())
+        return self._renderer
 
     def fetch(self, force: bool = False) -> None:
         """Pull your logbook from Tension, at most every FETCH_EVERY_SECONDS."""
@@ -143,7 +145,6 @@ def create_app(data_dir: Path | None = None, demo_mode: bool | None = None) -> F
         return {
             "demo": ctx.demo,
             "board_ready": ctx.board_ready,
-            "images_ready": ctx.images_dir.exists(),
             "account": {"username": account["username"]} if account else None,
             "active_session_id": active["id"] if active else None,
             "error": ctx.last_error,

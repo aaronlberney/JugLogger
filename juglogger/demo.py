@@ -1,25 +1,22 @@
 """A fake Tension Board 2 for demo mode and tests.
 
 It builds a small SQLite database with the same tables and columns JugLogger reads
-from the real one, a stand-in board image, and a fake logbook that fills each
-session with climbs as the timer runs.
+from the real one (holes placed where the holds are in the bundled TB2 layout
+images), and a fake logbook that fills each session with climbs as the timer runs.
 """
 
 from __future__ import annotations
 
+import json
 import random
 import sqlite3
 import uuid as uuidlib
 from datetime import datetime, timedelta
 from pathlib import Path
 
-from PIL import Image, ImageDraw, ImageFilter
 
 from .store import TIME_FORMAT
 
-EDGES = (-64.0, 64.0, 0.0, 128.0)  # left, right, bottom, top
-IMAGE_SIZE = (1080, 1080)
-SPACING = 8
 ROLES = [  # id, name, screen color
     (5, "start", "00DD00"),
     (6, "middle", "4444FF"),
@@ -41,18 +38,22 @@ NAMES = [
 ]
 
 
-def _hole_grid() -> list[tuple[int, float, float]]:
-    holes, hole_id = [], 1
-    left, right, bottom, top = EDGES
-    y = bottom + SPACING
-    while y < top:
-        x = left + SPACING
-        while x < right:
-            holes.append((hole_id, x, y))
-            hole_id += 1
-            x += SPACING
-        y += SPACING
-    return holes
+ASSETS = Path(__file__).resolve().parent / "assets"
+LAYOUTS = [(10, "Tension Board 2 Mirror", 1, "tb2-mirror-12x12"), (11, "Tension Board 2 Spray", 0, "tb2-spray-12x12")]
+BOARD_WIDTH_UNITS = 144.0  # 12 ft in inches
+
+
+def _layout_holes(rng: random.Random, asset: str, first_id: int) -> list[tuple[int, float, float]]:
+    """Fake database holes taken from the hold centers in the bundled layout image,
+    converted to inches with a little jitter (a hold's bolt isn't its center)."""
+    meta = json.loads((ASSETS / f"{asset}.json").read_text())
+    width, height = meta["size"]
+    scale = width / BOARD_WIDTH_UNITS
+    return [
+        (first_id + i, round((px - width / 2) / scale + rng.uniform(-0.6, 0.6), 2),
+         round((height - py) / scale + 4 + rng.uniform(-0.6, 0.6), 2))
+        for i, (px, py, _) in enumerate(meta["holds"])
+    ]
 
 
 def build_board_database(path: Path) -> None:
@@ -66,9 +67,6 @@ def build_board_database(path: Path) -> None:
         CREATE TABLE layouts (id INTEGER PRIMARY KEY, product_id INTEGER, name TEXT, is_mirrored INTEGER);
         CREATE TABLE product_sizes (id INTEGER PRIMARY KEY, product_id INTEGER, edge_left REAL,
             edge_right REAL, edge_bottom REAL, edge_top REAL, name TEXT, description TEXT);
-        CREATE TABLE sets (id INTEGER PRIMARY KEY, name TEXT);
-        CREATE TABLE product_sizes_layouts_sets (id INTEGER PRIMARY KEY, product_size_id INTEGER,
-            layout_id INTEGER, set_id INTEGER, image_filename TEXT);
         CREATE TABLE holes (id INTEGER PRIMARY KEY, product_id INTEGER, name TEXT, x REAL, y REAL,
             mirrored_hole_id INTEGER);
         CREATE TABLE placements (id INTEGER PRIMARY KEY, layout_id INTEGER, hole_id INTEGER,
@@ -83,36 +81,33 @@ def build_board_database(path: Path) -> None:
         CREATE TABLE shared_syncs (table_name TEXT PRIMARY KEY, last_synchronized_at TEXT);
     """)
     c.execute("INSERT INTO products VALUES (5, 'Tension Board 2')")
-    c.executemany("INSERT INTO layouts VALUES (?, 5, ?, ?)",
-                  [(10, "Tension Board 2 Mirror", 1), (11, "Tension Board 2 Spray", 0)])
-    c.execute("INSERT INTO product_sizes VALUES (7, 5, ?, ?, ?, ?, '12 high x 12 wide', 'Demo')", EDGES)
-    c.executemany("INSERT INTO sets VALUES (?, ?)", [(1, "Wood"), (2, "Plastic")])
-    c.executemany("INSERT INTO product_sizes_layouts_sets VALUES (?, 7, ?, ?, ?)", [
-        (1, 10, 1, "product_sizes_layouts_sets/demo-mirror-wood.png"),
-        (2, 10, 2, "product_sizes_layouts_sets/demo-mirror-plastic.png"),
-        (3, 11, 1, "product_sizes_layouts_sets/demo-spray-wood.png"),
-        (4, 11, 2, "product_sizes_layouts_sets/demo-spray-plastic.png"),
-    ])
-    holes = _hole_grid()
-    by_position = {(x, y): hole_id for hole_id, x, y in holes}
-    c.executemany("INSERT INTO holes VALUES (?, 5, ?, ?, ?, ?)", [
-        (hole_id, f"h{hole_id}", x, y, by_position.get((-x, y))) for hole_id, x, y in holes
-    ])
-    placements = []
-    for layout_id in (10, 11):
-        for hole_id, x, y in holes:
-            set_id = 1 if (hole_id + layout_id) % 3 else 2
-            placements.append((layout_id * 1000 + hole_id, layout_id, hole_id, set_id, 6))
-    c.executemany("INSERT INTO placements VALUES (?, ?, ?, ?, ?)", placements)
+    c.executemany("INSERT INTO layouts VALUES (?, 5, ?, ?)", [(i, n, m) for i, n, m, _ in LAYOUTS])
     c.executemany("INSERT INTO placement_roles VALUES (?, 5, ?, ?)", ROLES)
     c.executemany("INSERT INTO difficulty_grades VALUES (?, ?)", GRADES)
+
+    layout_holes = {}
+    all_holes = []
+    for layout_id, _, mirrored, asset in LAYOUTS:
+        holes = _layout_holes(rng, asset, first_id=layout_id * 1000)
+        layout_holes[layout_id] = holes
+        for hole_id, x, y in holes:
+            mirror_id = None
+            if mirrored:
+                mirror_id = min(holes, key=lambda h: (h[1] + x) ** 2 + (h[2] - y) ** 2)[0]
+            all_holes.append((hole_id, f"h{hole_id}", x, y, mirror_id))
+            c.execute("INSERT INTO placements VALUES (?, ?, ?, 1, 6)", (hole_id, layout_id, hole_id))
+    c.executemany("INSERT INTO holes VALUES (?, 5, ?, ?, ?, ?)", all_holes)
+    xs = [h[2] for h in all_holes]
+    ys = [h[3] for h in all_holes]
+    c.execute("INSERT INTO product_sizes VALUES (7, 5, ?, ?, ?, ?, '12 x 12', 'Demo')",
+              (min(xs) - 4, max(xs) + 4, min(ys) - 4, max(ys) + 4))
 
     for index, name in enumerate(NAMES):
         layout_id = 10 if index % 2 == 0 else 11
         climb_uuid = uuidlib.UUID(int=rng.getrandbits(128)).hex
         c.execute("INSERT INTO climbs VALUES (?, ?, ?, ?, ?, 1)",
                   (climb_uuid, layout_id, rng.choice(["tbsetter", "aaron", "crimpking"]),
-                   name, _frames(rng, layout_id, holes)))
+                   name, _frames(rng, layout_holes[layout_id])))
         base = rng.uniform(12, 18)
         for angle in range(20, 55, 5):
             difficulty = min(20, base + (angle - 40) / 5)
@@ -123,64 +118,41 @@ def build_board_database(path: Path) -> None:
     c.close()
 
 
-def _frames(rng: random.Random, layout_id: int, holes) -> str:
-    rows = sorted({y for _, _, y in holes})
-    path_x = rng.uniform(-40, 40)
-    frames = []
-    for row_index, y in enumerate(rows[2:], start=2):
-        if row_index % 2:
-            continue
-        path_x = max(-56, min(56, path_x + rng.choice([-16, -8, 0, 8, 16])))
-        hole = min(holes, key=lambda h: (h[2] != y, abs(h[1] - path_x)))
-        role = 5 if row_index == 2 else 7 if row_index >= len(rows) - 2 else 6
-        frames.append(f"p{layout_id * 1000 + hole[0]}r{role}")
-    for _ in range(rng.randint(2, 4)):
-        hole = rng.choice([h for h in holes if h[2] <= 24])
-        frames.append(f"p{layout_id * 1000 + hole[0]}r8")
+def _frames(rng: random.Random, holes: list[tuple[int, float, float]]) -> str:
+    """A plausible boulder: start low, 5-7 hands working up, a finish near the top, a few feet."""
+    ys = sorted(h[2] for h in holes)
+    low, high = ys[0], ys[-1]
+    span = high - low
+    x = rng.uniform(-40, 40)
+    y = low + span * rng.uniform(0.25, 0.4)
+    frames, used = [], set()
+
+    def pick(target_x, target_y):
+        hole = min((h for h in holes if h[0] not in used),
+                   key=lambda h: (h[1] - target_x) ** 2 + (h[2] - target_y) ** 2)
+        used.add(hole[0])
+        return hole
+
+    start = pick(x, y)
+    frames.append(f"p{start[0]}r5")
+    hands = rng.randint(5, 7)
+    step = (high - span * 0.06 - y) / (hands + 1)
+    for _ in range(hands):
+        x = max(-60, min(60, x + rng.uniform(-22, 22)))
+        y += step * rng.uniform(0.8, 1.2)
+        frames.append(f"p{pick(x, y)[0]}r6")
+    finish = pick(max(-60, min(60, x + rng.uniform(-15, 15))), high)
+    frames.append(f"p{finish[0]}r7")
+    for _ in range(rng.randint(2, 3)):
+        frames.append(f"p{pick(start[1] + rng.uniform(-25, 25), low + span * rng.uniform(0, 0.18))[0]}r8")
     return "".join(frames)
 
 
-def build_board_images(database_path: Path, images_dir: Path) -> None:
-    """Stand-in hold images: one transparent PNG per layout and set."""
-    connection = sqlite3.connect(database_path)
-    rows = connection.execute(
-        "SELECT psls.layout_id, psls.set_id, psls.image_filename FROM product_sizes_layouts_sets psls"
-    ).fetchall()
-    holes = connection.execute("SELECT id, x, y FROM holes").fetchall()
-    placements = connection.execute("SELECT layout_id, hole_id, set_id FROM placements").fetchall()
-    connection.close()
-
-    left, right, bottom, top = EDGES
-    width, height = IMAGE_SIZE
-    hole_xy = {hole_id: (x, y) for hole_id, x, y in holes}
-    colors = {1: (176, 128, 84, 255), 2: (32, 32, 34, 255)}
-    for layout_id, set_id, filename in rows:
-        rng = random.Random(layout_id * 10 + set_id)
-        image = Image.new("RGBA", IMAGE_SIZE, (0, 0, 0, 0))
-        draw = ImageDraw.Draw(image)
-        for p_layout, hole_id, p_set in placements:
-            if p_layout != layout_id or p_set != set_id:
-                continue
-            x, y = hole_xy[hole_id]
-            px = (x - left) / (right - left) * width
-            py = height - (y - bottom) / (top - bottom) * height
-            rx, ry = rng.uniform(14, 30), rng.uniform(10, 22)
-            draw.ellipse((px - rx, py - ry, px + rx, py + ry), fill=colors[set_id])
-            draw.ellipse((px - rx * .45, py - ry * .2, px + rx * .3, py + ry * .5),
-                         fill=tuple(min(255, v + 40) for v in colors[set_id][:3]) + (255,))
-        image = image.filter(ImageFilter.GaussianBlur(0.6))
-        output = images_dir / filename
-        output.parent.mkdir(parents=True, exist_ok=True)
-        image.save(output)
-
-
-def build(data_dir: Path) -> tuple[Path, Path]:
+def build(data_dir: Path) -> Path:
     database_path = data_dir / "demo-board.sqlite3"
-    images_dir = data_dir / "demo-images"
-    if not database_path.exists() or not images_dir.exists():
+    if not database_path.exists():
         build_board_database(database_path)
-        build_board_images(database_path, images_dir)
-    return database_path, images_dir
+    return database_path
 
 
 class DemoLogbook:

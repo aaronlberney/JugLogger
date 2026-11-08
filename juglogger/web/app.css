@@ -12,8 +12,8 @@
   --text: #f4f4f5;
   --muted: #8b8b92;
   --faint: #55555c;
-  --accent: #fc5200;
-  --accent-soft: rgba(252, 82, 0, 0.14);
+  --accent: #ff3b30;
+  --accent-soft: rgba(255, 59, 48, 0.14);
   --danger: #ff4d4d;
   --radius: 14px;
   --sans: "Outfit", ui-sans-serif, system-ui, sans-serif;
@@ -74,7 +74,7 @@ h2 { font-weight: 600; font-size: 22px; letter-spacing: -0.01em; margin: 0; }
 .btn:hover { background: var(--surface-2); border-color: #33333a; }
 .btn:active { transform: scale(0.98); }
 .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
-.btn.primary:hover { background: #ff6a1f; }
+.btn.primary:hover { background: #ff5a50; }
 .btn.ghost { background: transparent; }
 .btn.danger { color: var(--danger); }
 .btn.sm { height: 32px; padding: 0 12px; font-size: 13px; }

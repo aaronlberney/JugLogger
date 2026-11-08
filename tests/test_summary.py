@@ -51,9 +51,10 @@ def test_session_summary(tmp_path, board, climbs):
 
 
 def test_holds_and_mirror(board, climbs):
-    climb = board.climb(climbs[0])
+    mirror_layout = next(layout for layout in board.layouts() if layout.is_mirrored)
+    climb = next(c for c in map(board.climb, climbs) if c.layout_id == mirror_layout.id)
     holds = board.holds(climb)
     mirrored = board.holds(climb, mirrored=True)
     assert holds and len(holds) == len(mirrored)
-    assert [h.x for h in mirrored] == [-h.x for h in holds]
+    assert all(abs(m.x + h.x) < 4 and abs(m.y - h.y) < 4 for m, h in zip(mirrored, holds))
     assert {h.role for h in holds} >= {"start", "finish"}

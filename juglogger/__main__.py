@@ -19,10 +19,9 @@ from pathlib import Path
 
 from . import tension
 from .boarddb import BoardDB
+from .graphics.board import BoardRenderer
 from .server import DEFAULT_DATA_DIR
 from .store import Store
-
-IMAGE_HOST = "https://api.tensionboardapp2.com/img"
 
 
 def data_dir(args) -> Path:
@@ -35,7 +34,6 @@ def password() -> str:
 
 def cmd_setup(args) -> int:
     import boardlib.db.aurora as aurora_db
-    import requests
 
     root = data_dir(args)
     root.mkdir(parents=True, exist_ok=True)
@@ -55,27 +53,11 @@ def cmd_setup(args) -> int:
     totals = tension.sync_board_database(db_path, session["token"])
     print(f"  synced {sum(totals.values())} rows")
 
-    board = BoardDB(db_path)
-    layouts = board.layouts()
-    if not layouts:
+    if not BoardDB(db_path).layouts():
         print("!! Couldn't find the TB2 Mirror/Spray layouts in the database. Run `doctor` and share the output.")
         return 1
-    images_dir = root / "tension-images"
-    for layout in layouts:
-        size = board.product_size_12x12(layout.product_id)
-        if not size:
-            print(f"!! No 12x12 size found for {layout.name}. Run `doctor` and share the output.")
-            continue
-        for filename in board.image_filenames(layout.id, size.id):
-            target = images_dir / filename
-            if target.exists():
-                continue
-            print(f"Downloading {layout.name} hold image {filename}")
-            response = requests.get(f"{IMAGE_HOST}/{filename}", timeout=60)
-            response.raise_for_status()
-            target.parent.mkdir(parents=True, exist_ok=True)
-            target.write_bytes(response.content)
-    print("\nAll set. Start the app with:  python -m juglogger serve")
+    print("\nAll set. Check the hold alignment with:  python -m juglogger doctor")
+    print("Then start the app with:  python -m juglogger serve")
     return 0
 
 
@@ -88,6 +70,7 @@ def cmd_doctor(args) -> int:
         print("✗ Board database missing. Run: python -m juglogger setup")
         return 1
     board = BoardDB(db_path)
+    renderer = BoardRenderer(board)
     print(f"✓ Board database: {db_path} ({db_path.stat().st_size // 1_000_000} MB)")
     with board._connect() as c:
         products = c.execute("SELECT id, name FROM products").fetchall()
@@ -113,10 +96,19 @@ def cmd_doctor(args) -> int:
             continue
         print(f"  size {size.id}: {size.name}  edges x {size.edge_left}..{size.edge_right}, "
               f"y {size.edge_bottom}..{size.edge_top}")
-        for filename in board.image_filenames(layout.id, size.id):
-            present = (root / "tension-images" / filename).exists()
-            ok &= present
-            print(f"  {'✓' if present else '✗'} image {filename}")
+        loaded = renderer.layout_image(layout.id)
+        if not loaded:
+            ok = False
+            print("  ✗ Couldn't line up the holds with the layout image")
+            continue
+        _, calibration, _ = loaded
+        good = calibration.matched >= 0.85 * calibration.total and calibration.rms_px < 25
+        ok &= good
+        preview = root / f"calibration-{layout.name.split()[-1].lower()}.png"
+        renderer.calibration_preview(layout.id).convert("RGB").save(preview)
+        print(f"  {'✓' if good else '✗'} holds lined up with the image: {calibration.matched}/{calibration.total} "
+              f"matched, off by {calibration.rms_px:.1f}px on average")
+        print(f"    check by eye: {preview} (every red ring should sit on a hold)")
     print(f"✓ Grades: {', '.join(sorted(set(filter(None, map(board.v_grade, board.grade_names)))))}")
 
     store = Store(root / "juglogger.sqlite3")
