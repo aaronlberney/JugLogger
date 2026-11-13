@@ -126,6 +126,45 @@ class BoardDB:
         )
         return dict(rows[0]) if rows else None
 
+    def climbs_set_by(self, user_id: int | None, username: str | None) -> list[dict]:
+        """The published climbs a user has set, newest first, each with its stats at
+        every angle it has been climbed at (most ascents first). Matches on the
+        setter's user id when the database has it, otherwise on the username."""
+        columns = {row["name"] for row in self._query("PRAGMA table_info(climbs)")}
+        if user_id and "setter_id" in columns:
+            where, params = "setter_id = ?", (user_id,)
+        elif username:
+            where, params = "lower(setter_username) = lower(?)", (username,)
+        else:
+            return []
+        if "is_draft" in columns:
+            where += " AND is_draft = 0"
+        optional = ", ".join(name if name in columns else f"NULL AS {name}" for name in ("angle", "created_at"))
+        climbs = self._query(
+            f"SELECT uuid, name, layout_id, {optional} FROM climbs WHERE {where} AND is_listed = 1", params)
+        out = []
+        for row in climbs:
+            stats = self._query(
+                "SELECT angle, display_difficulty, benchmark_difficulty, ascensionist_count "
+                "FROM climb_stats WHERE climb_uuid = ? ORDER BY ascensionist_count DESC, angle", (row["uuid"],))
+            layout = self.layout(row["layout_id"]) if row["layout_id"] else None
+            out.append({
+                "climb_uuid": row["uuid"],
+                "name": row["name"] or "Untitled",
+                "layout": layout.name if layout else None,
+                "set_angle": row["angle"],
+                "created_at": row["created_at"],
+                "ascents": sum(s["ascensionist_count"] or 0 for s in stats),
+                "angles": [{
+                    "angle": s["angle"],
+                    "grade": self.v_grade(s["display_difficulty"]),
+                    "ascents": s["ascensionist_count"] or 0,
+                    "is_classic": s["benchmark_difficulty"] is not None,
+                } for s in stats],
+            })
+        out.sort(key=lambda climb: climb["created_at"] or "", reverse=True)
+        return out
+
     # Layouts and sizes
 
     @cached_property

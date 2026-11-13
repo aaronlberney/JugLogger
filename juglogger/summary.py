@@ -73,17 +73,7 @@ class SessionSummary:
     def pyramid(self) -> list[tuple[str, int]]:
         """Send counts per V grade, hardest first, with no gaps between the easiest
         and hardest grade sent."""
-        counts: dict[int, int] = {}
-        for climb in self.sent:
-            rank = v_grade_rank(climb.grade)
-            if rank >= -1:
-                counts[rank] = counts.get(rank, 0) + 1
-        if not counts:
-            return []
-        return [
-            ("VB" if rank == -1 else f"V{rank}", counts.get(rank, 0))
-            for rank in range(max(counts), min(counts) - 1, -1)
-        ]
+        return grade_pyramid(climb.grade for climb in self.sent)
 
     def to_dict(self) -> dict:
         hardest = self.hardest
@@ -102,6 +92,22 @@ class SessionSummary:
             "pyramid": self.pyramid(),
             "climbs": [asdict(c) for c in self.climbs],
         }
+
+
+def grade_pyramid(grades) -> list[tuple[str, int]]:
+    """Counts per V grade, hardest first, with no gaps between the easiest and the
+    hardest grade. Grades that aren't V grades are left out."""
+    counts: dict[int, int] = {}
+    for grade in grades:
+        rank = v_grade_rank(grade)
+        if rank >= -1:
+            counts[rank] = counts.get(rank, 0) + 1
+    if not counts:
+        return []
+    return [
+        ("VB" if rank == -1 else f"V{rank}", counts.get(rank, 0))
+        for rank in range(max(counts), min(counts) - 1, -1)
+    ]
 
 
 def format_duration(seconds: int) -> str:

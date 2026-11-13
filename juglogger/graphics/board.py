@@ -33,12 +33,32 @@ HEAT_FULL = 10            # uses at which a heatmap hold reaches its darkest sha
 HEAT_DEEP = (74, 8, 12)   # that darkest shade
 
 
+def heat_level(count: int, full: int = HEAT_FULL) -> float:
+    """0 for a hold used once, 1 at `full` uses or more. Steps are larger at low
+    counts, where most holds are."""
+    return min(1.0, math.log(max(1, count)) / math.log(max(2, full)))
+
+
 def heat_color(color: tuple[int, int, int], count: int) -> tuple[int, int, int]:
     """The heatmap shade for a hold used `count` times: `color` at one use, HEAT_DEEP
     at HEAT_FULL uses or more. It depends on the count alone, never on the rest of the
-    session, and steps are larger at low counts, where most holds are."""
-    t = min(1.0, math.log(max(1, count)) / math.log(HEAT_FULL))
+    session."""
+    t = heat_level(count)
     return tuple(round(a + (b - a) * t) for a, b in zip(color, HEAT_DEEP))
+
+
+# The all-time heatmap on the profile page darkens with use, like the overlay, but
+# starts lighter and stops short of oxblood, which would disappear on the app's dark
+# background.
+PROFILE_HEAT = ((255, 176, 92), (214, 40, 40), (112, 16, 20))
+
+
+def ramp_color(stops: tuple[tuple[int, int, int], ...], t: float) -> tuple[int, int, int]:
+    """The color a fraction `t` of the way along evenly spaced `stops`."""
+    position = max(0.0, min(1.0, t)) * (len(stops) - 1)
+    index = min(len(stops) - 2, int(position))
+    a, b = stops[index], stops[index + 1]
+    return tuple(round(x + (y - x) * (position - index)) for x, y in zip(a, b))
 
 
 def asset_name(layout: Layout) -> str | None:
@@ -265,17 +285,87 @@ class BoardRenderer:
     def hold_use(self, climbs) -> tuple[int, dict[tuple[float, float], int]] | None:
         """How many of the session's climbs use each hold, for the layout with the most
         climbs: (layout id, {(x, y): count}). `climbs` need climb_uuid and is_mirror."""
-        layouts: dict[int, dict[tuple[float, float], int]] = {}
-        for entry in climbs:
-            climb = self.db.climb(entry.climb_uuid)
-            if not climb or climb.layout_id is None or not self.layout_image(climb.layout_id):
-                continue
-            use = layouts.setdefault(climb.layout_id, {})
-            for spot in {(hold.x, hold.y) for hold in self.db.holds(climb, mirrored=entry.is_mirror)}:
-                use[spot] = use.get(spot, 0) + 1
+        layouts = self.hold_use_by_layout((entry.climb_uuid, entry.is_mirror) for entry in climbs)
         if not layouts:
             return None
         return max(layouts.items(), key=lambda item: sum(item[1].values()))
+
+    def hold_use_by_layout(self, climbs) -> dict[int, dict[tuple[float, float], int]]:
+        """How many climbs use each hold, per layout: {layout id: {(x, y): count}}.
+        `climbs` are (climb_uuid, is_mirror) pairs; a pair given twice counts once."""
+        layouts: dict[int, dict[tuple[float, float], int]] = {}
+        for climb_uuid, is_mirror in set(climbs):
+            climb = self.db.climb(climb_uuid)
+            if not climb or climb.layout_id is None or not self.layout_image(climb.layout_id):
+                continue
+            use = layouts.setdefault(climb.layout_id, {})
+            for spot in {(hold.x, hold.y) for hold in self.db.holds(climb, mirrored=is_mirror)}:
+                use[spot] = use.get(spot, 0) + 1
+        return layouts
+
+    def hole_positions(self, layout_id: int) -> list[tuple[float, float, float, float]]:
+        """Every hold on the layout image: board x, y and where its bolt is in the
+        image as fractions of the width and height. For picking a hold by clicking."""
+        loaded = self.layout_image(layout_id)
+        if not loaded:
+            return []
+        image, calibration, _ = loaded
+        out = []
+        for x, y in self.db.layout_hole_positions(layout_id):
+            px, py = calibration.to_px(x, y)
+            if 0 <= px < image.width and 0 <= py < image.height:
+                out.append((x, y, px / image.width, py / image.height))
+        return out
+
+    def render_marked(self, layout_id: int, marks: list[tuple[float, float, tuple[int, int, int]]],
+                      dim: float = 0.6) -> Image.Image | None:
+        """The whole board, slightly faded, with the holds in `marks` (board x, y and
+        a color) at full strength and outlined along their shape in that color."""
+        loaded = self.layout_image(layout_id)
+        if not loaded:
+            return None
+        image, _, ring_px = loaded
+        stroke = max(5, round(ring_px * 0.35))
+        pad = stroke * 4
+        lit_mask = Image.new("L", image.size, 0)
+        glow = Image.new("RGBA", image.size, (0, 0, 0, 0))
+        outlines = Image.new("RGBA", image.size, (0, 0, 0, 0))
+        for x, y, color in marks:
+            shape, (left, top) = self.hold_shape(layout_id, x, y)
+            local = Image.new("L", (shape.width + pad * 2, shape.height + pad * 2), 0)
+            local.paste(shape, (pad, pad))
+            origin = (left - pad, top - pad)
+            lit_mask.paste(255, origin, local)
+            line = ImageChops.subtract(_grow(local, stroke), local).filter(ImageFilter.GaussianBlur(0.7))
+            glow.paste(tuple(color) + (200,), origin, ImageChops.subtract(_grow(local, stroke * 2), local))
+            outlines.paste(tuple(color) + (255,), origin, line)
+        alpha = image.getchannel("A")
+        out = image.copy()
+        out.putalpha(alpha.point(lambda a: int(a * dim)))
+        lit = image.copy()
+        lit.putalpha(ImageChops.multiply(alpha, lit_mask))
+        out = Image.alpha_composite(out, lit)
+        glow = glow.filter(ImageFilter.GaussianBlur(ring_px * 0.3))
+        glow.putalpha(ImageChops.multiply(glow.getchannel("A"), ImageChops.invert(lit_mask)))
+        return Image.alpha_composite(Image.alpha_composite(out, glow), outlines)
+
+    def render_profile_heatmap(self, layout_id: int, use: dict[tuple[float, float], int],
+                               backdrop: float = 0.16) -> Image.Image | None:
+        """The all-time heatmap for the profile page: the whole board very faint, and
+        over it every hold in `use` as a flat fill, light orange for the least used,
+        darkening to deep red for the most used. Unlike the session overlay, the scale runs to
+        this layout's own most-used hold."""
+        loaded = self.layout_image(layout_id)
+        if not loaded:
+            return None
+        image = loaded[0]
+        out = image.copy()
+        out.putalpha(image.getchannel("A").point(lambda a: int(a * backdrop)))
+        full = max(use.values(), default=1)
+        for (x, y), count in sorted(use.items(), key=lambda item: item[1]):
+            shape, corner = self.hold_shape(layout_id, x, y)
+            out.paste(ramp_color(PROFILE_HEAT, heat_level(count, full)) + (255,), corner, shape)
+        return out
 
     def render_heatmap(self, layout_id: int, use: dict[tuple[float, float], int], width: int,
                        color: tuple[int, int, int]) -> Image.Image:

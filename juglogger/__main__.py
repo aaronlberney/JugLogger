@@ -144,6 +144,7 @@ def cmd_serve(args) -> int:
     from .server import create_app
 
     app = create_app(data_dir=data_dir(args), demo_mode=args.demo)
+    app.state.ctx.warm()
     url = f"http://{args.host}:{args.port}"
     print(f"JugLogger{' (demo)' if args.demo else ''} running at {url}")
     if not args.no_browser:

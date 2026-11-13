@@ -186,6 +186,12 @@ class Store:
             ).fetchall()
         return [dict(row) for row in rows]
 
+    def listed_entries(self) -> list[dict]:
+        """The whole logbook, oldest first."""
+        with self._connect() as c:
+            rows = c.execute("SELECT * FROM entries WHERE is_listed = 1 ORDER BY climbed_at").fetchall()
+        return [dict(row) for row in rows]
+
     def latest_entries(self, limit: int = 5) -> list[dict]:
         with self._connect() as c:
             rows = c.execute(
@@ -197,3 +203,10 @@ class Store:
         with self._connect() as c:
             row = c.execute("SELECT value FROM meta WHERE key = ?", (key,)).fetchone()
         return row["value"] if row else None
+
+    def set_meta(self, key: str, value: str | None) -> None:
+        with self._connect() as c:
+            if value is None:
+                c.execute("DELETE FROM meta WHERE key = ?", (key,))
+            else:
+                c.execute("INSERT OR REPLACE INTO meta VALUES (?, ?)", (key, value))

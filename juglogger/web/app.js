@@ -103,8 +103,9 @@ async function route() {
   stopTimers();
   showError("");
   const hash = location.hash || "#/";
-  document.querySelectorAll("nav a").forEach((a) =>
-    a.classList.toggle("on", (a.dataset.nav === "history") === hash.startsWith("#/history") && !hash.startsWith("#/session")));
+  const tab = hash.startsWith("#/history") ? "history" : hash.startsWith("#/profile") ? "profile"
+    : hash.startsWith("#/session") ? "" : "home";
+  document.querySelectorAll("nav a").forEach((a) => a.classList.toggle("on", a.dataset.nav === tab));
   try {
     status = await api("/api/status");
     if (status.error) showError(status.error);
@@ -113,6 +114,7 @@ async function route() {
     const m = hash.match(/^#\/session\/(\d+)/);
     if (m) return renderSession(Number(m[1]));
     if (hash.startsWith("#/history")) return renderHistory();
+    if (hash.startsWith("#/profile")) return renderProfile();
     return status.active_session_id ? renderLive(status.active_session_id) : renderIdle();
   } catch (error) {
     app.innerHTML = `<div class="empty">${esc(error.message)}</div>`;
@@ -259,6 +261,343 @@ async function renderHistory() {
           <div><div class="n accent">${esc(s.top_grade || "—")}</div><div class="l">Top</div></div>
         </a>`).join("") : `<div class="empty">No sessions yet.</div>`}
     </div>`;
+}
+
+// ---------- profile ----------
+
+const TB2_ANGLES = Array.from({ length: 14 }, (_, i) => i * 5);   // 0° to 65°
+const shortLayout = (name) => (name || "").replace(/^Tension Board 2\s*/i, "TB2 ");
+
+function ascentRow(a) {
+  const meta = [a.angle != null ? `${a.angle}°` : "—"];
+  if (a.is_mirror) meta.push("Mirrored");
+  if (a.layout) meta.push(shortLayout(a.layout));
+  if (a.is_classic) meta.push("Classic");
+  const tries = a.flash ? `<span class="flash">Flash</span>` : `${a.tries} ${a.tries === 1 ? "try" : "tries"}`;
+  const time = parseTime(a.climbed_at).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+  return `
+    <div class="climb">
+      <div class="name">${esc(a.name)}</div>
+      <div class="grade">${esc(a.grade || "—")}</div>
+      <div class="meta">${meta.map(esc).join(" · ")} · ${tries} · ${esc(time)}</div>
+      ${a.comment ? `<div class="note">${esc(a.comment)}</div>` : ""}
+    </div>`;
+}
+
+// A climb the profile's owner set: its grade and ascents at the angle it was set
+// at (or its most climbed angle), then every angle it has been climbed at.
+function setRow(c) {
+  const main = c.angles.find((a) => a.angle === c.set_angle) || c.angles[0];
+  const meta = [c.set_angle != null ? `Set at ${c.set_angle}°` : main ? `${main.angle}°` : "—"];
+  if (c.layout) meta.push(shortLayout(c.layout));
+  meta.push(`${c.ascents} ${c.ascents === 1 ? "ascent" : "ascents"}`);
+  if (c.created_at) meta.push(parseTime(c.created_at.slice(0, 19)).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" }));
+  return `
+    <div class="climb ${c.ascents ? "" : "project"}">
+      <div class="name">${esc(c.name)}</div>
+      <div class="grade">${esc(main?.grade || "—")}</div>
+      <div class="meta">${meta.map(esc).join(" · ")}</div>
+      ${c.angles.length ? `<div class="angle-stats">${c.angles.map((a) =>
+        `<span><b>${a.angle}°</b> ${esc(a.grade || "—")} · ${a.ascents} ${a.ascents === 1 ? "ascent" : "ascents"}${a.is_classic ? " · classic" : ""}</span>`).join("")}</div>` : ""}
+    </div>`;
+}
+
+function badgeTile(b) {
+  const progress = b.progress ? `${b.progress.value} / ${b.progress.next}` : "";
+  return `
+    <div class="badge ${b.earned ? "earned" : ""}" title="${esc(b.detail)}">
+      <div class="mark">${esc(b.mark)}</div>
+      <div>
+        <div class="t">${esc(b.title)}</div>
+        <div class="d">${esc(b.detail)}</div>
+        ${b.progress ? `<div class="p"><i style="width:${Math.min(100, (b.progress.value / b.progress.next) * 100)}%"></i></div><div class="d">${b.earned ? "Next: " : ""}${progress}</div>` : ""}
+      </div>
+    </div>`;
+}
+
+async function renderProfile(refresh = false) {
+  if (!app.querySelector("[data-profile]")) app.innerHTML = `<div class="empty">Loading…</div>`;
+  const p = await api(`/api/profile${refresh ? "?refresh=1" : ""}`);
+  showError(p.error);
+  const t = p.totals;
+  const favorites = p.favorites;
+  const filters = { grade: "", angle: "", classic: "all", from: "", to: "" };
+  const PAGE = 10;       // ascents shown at first, and added by each "Show more"
+  let shown = PAGE;
+  const state = { layout: p.layouts[0]?.id ?? null, picking: "favorite_hold" };
+  const firstDay = p.ascents.length ? p.ascents[p.ascents.length - 1].climbed_at.slice(0, 10) : "";
+  const lastDay = p.ascents.length ? p.ascents[0].climbed_at.slice(0, 10) : "";
+  const maxCount = Math.max(1, ...p.pyramid.map(([, n]) => n));
+  const layoutTabs = p.layouts.length > 1
+    ? `<div class="seg" data-layouts>${p.layouts.map((l) => `<button data-v="${l.id}">${esc(l.short)}</button>`).join("")}</div>` : "";
+
+  app.innerHTML = `
+    <div data-profile>
+      <div class="eyebrow">Profile · Tension Board 2${status.demo ? " · demo" : ""}</div>
+      <h1>${esc(p.username)}</h1>
+      <div class="stats" style="margin-top:24px">
+        <div><div class="eyebrow">Ascents</div><div class="v">${t.ascents}</div></div>
+        <div><div class="eyebrow">Climbs</div><div class="v">${t.climbs}</div></div>
+        <div><div class="eyebrow">Top grade</div><div class="v accent">${esc(t.top_grade || "—")}</div></div>
+        <div><div class="eyebrow">Flashes</div><div class="v">${t.flashes}</div></div>
+        <div><div class="eyebrow">Days on</div><div class="v">${t.days}</div></div>
+      </div>
+
+      <div class="two" style="margin-top:16px">
+        <div class="card">
+          <div class="eyebrow">Every ascent</div><h2 style="margin-top:4px">Grade pyramid</h2>
+          <div class="bars">
+            ${p.pyramid.length ? p.pyramid.map(([grade, n]) => `
+              <button class="bar" data-grade="${esc(grade)}" title="Show ${esc(grade)} ascents">
+                <span class="g">${esc(grade)}</span>
+                <span class="track"><span class="fill" style="width:${n ? Math.max(1.5, (n / maxCount) * 100) : 0}%"></span></span>
+                <span class="c">${n}</span>
+              </button>`).join("") : `<div class="empty">No sends yet.</div>`}
+          </div>
+        </div>
+        <div class="stack">
+          <div class="card">
+            <div class="eyebrow">Favorite angle</div>
+            <div class="angle" id="angle"></div>
+            <div class="chips" id="angles">
+              ${TB2_ANGLES.map((a) => `<button data-angle="${a}" class="${p.angles.some((x) => x.angle === a) ? "" : "unused"}">${a}°</button>`).join("")}
+            </div>
+          </div>
+          <div class="card">
+            <div class="eyebrow">Set by ${esc(p.username)}</div>
+            <h2 style="margin-top:4px">${p.set_climbs.length} ${p.set_climbs.length === 1 ? "climb" : "climbs"} set</h2>
+            <div class="climbs setlist">
+              ${p.set_climbs.length ? p.set_climbs.map(setRow).join("") : `<div class="empty">Climbs you publish in the Tension app show up here.</div>`}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="section-head">
+        <div><div class="eyebrow">Badges</div><h2 style="margin-top:4px">${p.badges.filter((b) => b.earned).length} of ${p.badges.length} earned</h2></div>
+        <button class="btn sm" id="badges-toggle">Show all ${p.badges.length}</button>
+      </div>
+      <div class="badges collapsed" id="badges">${[...p.badges].sort((a, b) => b.earned - a.earned).map(badgeTile).join("")}</div>
+
+      <div class="section-head">
+        <div><div class="eyebrow">Board</div><h2 style="margin-top:4px">Holds</h2></div>
+        <div class="controls">${layoutTabs}</div>
+      </div>
+      ${p.layouts.length ? `
+      <div class="two">
+        <div class="card">
+          <div class="tile-head">
+            <span class="eyebrow">Favorite &amp; least favorite</span>
+            <div class="seg" data-picking>
+              <button data-v="favorite_hold"><i class="dot fav"></i>Favorite</button>
+              <button data-v="least_favorite_hold"><i class="dot least"></i>Least favorite</button>
+            </div>
+          </div>
+          <div class="boardpick" id="pick"><span class="spin">rendering…</span><img alt="The board. Click a hold to choose it." draggable="false"><div class="hover" hidden></div></div>
+          <div class="muted small" id="pick-note"></div>
+        </div>
+        <div class="card">
+          <div class="tile-head"><span class="eyebrow">Heatmap · every climb sent</span></div>
+          <div class="boardpick static" id="heatbox"><span class="spin">rendering…</span><img id="heat" alt="Heatmap of the holds on every climb sent" draggable="false"><div class="hover" hidden></div><div class="tip" hidden></div></div>
+          <div class="legend"><span>1</span><i></i><span id="heat-max"></span></div>
+          <div class="muted small" id="heat-note"></div>
+        </div>
+      </div>` : `<div class="empty">No board image for this layout.</div>`}
+
+      <div class="section-head">
+        <div><div class="eyebrow">Logbook</div><h2 style="margin-top:4px" id="log-count"></h2></div>
+        <button class="btn sm" id="refresh">Refresh from Tension</button>
+      </div>
+      <div class="filters">
+        <label class="field"><span class="eyebrow">Grade</span>
+          <select data-f="grade"><option value="">All</option>${p.pyramid.filter(([, n]) => n).map(([g]) => `<option>${esc(g)}</option>`).join("")}</select></label>
+        <label class="field"><span class="eyebrow">Angle</span>
+          <select data-f="angle"><option value="">All</option>${p.angles.map((a) => `<option value="${a.angle}">${a.angle}°</option>`).join("")}</select></label>
+        <label class="field"><span class="eyebrow">Classic</span>
+          <select data-f="classic"><option value="all">All</option><option value="classic">Classics</option><option value="other">Not classics</option></select></label>
+        <label class="field"><span class="eyebrow">From</span><input type="date" data-f="from" min="${firstDay}" max="${lastDay}"></label>
+        <label class="field"><span class="eyebrow">To</span><input type="date" data-f="to" min="${firstDay}" max="${lastDay}"></label>
+        <button class="btn sm ghost" id="clear" hidden>Clear</button>
+      </div>
+      <details class="card logbook" open>
+        <summary class="row" style="justify-content:space-between"><span class="eyebrow">Ascents by date</span><span class="muted chev"></span></summary>
+        <div id="log"></div>
+        <div class="more"><button class="btn sm" id="more" hidden></button></div>
+      </details>
+    </div>`;
+
+  // Logbook and its filters
+  const paintLog = () => {
+    const rows = p.ascents.filter((a) => {
+      const day = a.climbed_at.slice(0, 10);
+      return (!filters.grade || a.grade === filters.grade)
+        && (filters.angle === "" || a.angle === Number(filters.angle))
+        && (filters.classic === "all" || (filters.classic === "classic") === a.is_classic)
+        && (!filters.from || day >= filters.from) && (!filters.to || day <= filters.to);
+    });
+    const filtered = rows.length !== p.ascents.length || Object.entries(filters).some(([k, v]) => v !== (k === "classic" ? "all" : ""));
+    document.getElementById("log-count").textContent = filtered
+      ? `${rows.length} of ${p.ascents.length} ascents` : `${rows.length} ${rows.length === 1 ? "ascent" : "ascents"}`;
+    document.getElementById("clear").hidden = !filtered;
+    const days = new Map();
+    const more = document.getElementById("more");
+    more.hidden = rows.length <= shown;
+    more.textContent = `Show ${Math.min(PAGE, rows.length - shown)} more · ${rows.length - shown} left`;
+    for (const a of rows.slice(0, shown)) {
+      const day = a.climbed_at.slice(0, 10);
+      if (!days.has(day)) days.set(day, []);
+      days.get(day).push(a);
+    }
+    document.getElementById("log").innerHTML = rows.length ? [...days].map(([day, list]) => `
+      <div class="day">
+        <div class="day-head"><span>${esc(parseTime(`${day} 12:00:00`).toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric", year: "numeric" }))}</span></div>
+        ${list.map(ascentRow).join("")}
+      </div>`).join("")
+      : `<div class="empty">${p.ascents.length ? "No ascents match these filters." : "Sends you log in the Tension app show up here."}</div>`;
+  };
+  document.getElementById("more").onclick = () => { shown += PAGE; paintLog(); };
+  document.getElementById("badges-toggle").onclick = (e) => {
+    const collapsed = document.getElementById("badges").classList.toggle("collapsed");
+    e.target.textContent = collapsed ? `Show all ${p.badges.length}` : "Show less";
+  };
+  const setFilter = (key, value) => {
+    shown = PAGE;
+    filters[key] = value;
+    app.querySelector(`[data-f="${key}"]`).value = value;
+    paintLog();
+  };
+  app.querySelectorAll("[data-f]").forEach((el) => el.addEventListener("change", () => setFilter(el.dataset.f, el.value)));
+  document.getElementById("clear").onclick = () => {
+    for (const key of Object.keys(filters)) setFilter(key, key === "classic" ? "all" : "");
+  };
+  app.querySelectorAll(".bar").forEach((bar) => bar.onclick = () => {
+    setFilter("grade", filters.grade === bar.dataset.grade ? "" : bar.dataset.grade);
+    document.querySelector(".filters").scrollIntoView({ behavior: "smooth", block: "start" });
+  });
+  document.getElementById("refresh").onclick = async (e) => {
+    e.target.disabled = true; e.target.textContent = "Refreshing…";
+    await renderProfile(true);
+  };
+
+  // Favorite angle
+  const paintAngle = () => {
+    const chosen = favorites.favorite_angle;
+    const most = [...p.angles].sort((a, b) => b.ascents - a.ascents)[0];
+    const stat = p.angles.find((a) => a.angle === chosen);
+    document.getElementById("angle").innerHTML = chosen == null
+      ? `<div class="big faint">—</div><div class="muted">Pick your favorite below.${most ? ` You've sent the most at ${most.angle}°.` : ""}</div>`
+      : `<div class="big">${chosen}°</div><div class="muted">${stat
+          ? `${stat.ascents} ${stat.ascents === 1 ? "ascent" : "ascents"} · top ${esc(stat.top_grade || "—")}${most && most.angle === chosen ? " · your most climbed" : ""}`
+          : "No sends logged at this angle yet."}</div>`;
+    document.querySelectorAll("#angles button").forEach((b) => b.classList.toggle("on", Number(b.dataset.angle) === chosen));
+  };
+  const save = async (change) => {
+    try { Object.assign(favorites, await api("/api/profile/favorites", { method: "PUT", body: change })); return true; }
+    catch (error) { showError(error.message); return false; }
+  };
+  document.getElementById("angles").onclick = async (e) => {
+    if (e.target.dataset.angle == null) return;
+    const angle = Number(e.target.dataset.angle);
+    if (await save({ favorite_angle: favorites.favorite_angle === angle ? null : angle })) paintAngle();
+  };
+
+  // Holds: favorite and least favorite picker, and the heatmap
+  const pick = document.getElementById("pick");
+  const layout = () => p.layouts.find((l) => l.id === state.layout);
+  const sameHold = (a, hole) => a && a.layout_id === state.layout && a.x === hole[0] && a.y === hole[1];
+  const paintBoards = (heat = true) => {
+    if (!pick) return;
+    const l = layout();
+    // The first render of a layout can take a few seconds: say so, and keep the
+    // box at the board's shape meanwhile.
+    const load = (img, src) => {
+      const spin = img.parentElement.querySelector(".spin");
+      spin.textContent = "rendering…";
+      spin.hidden = false;
+      img.onload = () => { spin.hidden = true; };
+      img.onerror = () => { spin.textContent = "couldn't render"; };
+      img.src = src;
+    };
+    load(pick.querySelector("img"), `/api/profile/board/${l.id}.png?v=${Date.now()}`);
+    if (heat) {
+      const img = document.getElementById("heat");
+      img.removeAttribute("src");   // don't leave the other layout's heatmap up while this one renders
+      load(img, `/api/profile/heatmap/${l.id}.png?v=${Date.now()}`);
+      document.getElementById("heat-max").textContent = l.max_use > 1 ? `${l.max_use} climbs` : "";
+      document.querySelector(".legend").hidden = l.max_use <= 1;
+      document.getElementById("heat-note").textContent = l.holds_used
+        ? `${l.holds_used} of ${l.holes.length} holds used on ${shortLayout(l.name)}. Hover a hold for its count; a hold counts once per climb.`
+        : `Nothing sent on ${shortLayout(l.name)} yet.`;
+    }
+    const where = (key) => {
+      const hold = favorites[key];
+      if (!hold) return "not chosen";
+      return hold.layout_id === l.id ? "shown" : `on ${p.layouts.find((x) => x.id === hold.layout_id)?.short ?? "another layout"}`;
+    };
+    document.getElementById("pick-note").textContent =
+      `Click a hold to set your ${state.picking === "favorite_hold" ? "favorite" : "least favorite"}; click it again to clear. Favorite: ${where("favorite_hold")}. Least favorite: ${where("least_favorite_hold")}.`;
+    app.querySelectorAll("[data-picking] button").forEach((b) => b.classList.toggle("on", b.dataset.v === state.picking));
+    app.querySelectorAll("[data-layouts] button").forEach((b) => b.classList.toggle("on", Number(b.dataset.v) === state.layout));
+  };
+  const holeAt = (event, el = pick) => {
+    const box = el.getBoundingClientRect();
+    const fx = (event.clientX - box.left) / box.width, fy = (event.clientY - box.top) / box.height;
+    let best = null, bestD = Infinity;
+    for (const hole of layout().holes) {
+      const d = Math.hypot((hole[2] - fx) * box.width, (hole[3] - fy) * box.height);
+      if (d < bestD) { best = hole; bestD = d; }
+    }
+    return bestD <= Math.max(14, box.width * 0.03) ? best : null;
+  };
+  if (pick) {
+    const hover = pick.querySelector(".hover");
+    pick.onmousemove = (e) => {
+      const hole = holeAt(e);
+      hover.hidden = !hole;
+      if (hole) {
+        hover.style.left = `${hole[2] * 100}%`; hover.style.top = `${hole[3] * 100}%`;
+        hover.className = `hover ${state.picking === "favorite_hold" ? "fav" : "least"}`;
+      }
+    };
+    pick.onmouseleave = () => { hover.hidden = true; };
+    pick.onclick = async (e) => {
+      const hole = holeAt(e);
+      if (!hole) return;
+      const other = state.picking === "favorite_hold" ? "least_favorite_hold" : "favorite_hold";
+      const change = { [state.picking]: sameHold(favorites[state.picking], hole) ? null : { layout_id: state.layout, x: hole[0], y: hole[1] } };
+      if (change[state.picking] && sameHold(favorites[other], hole)) change[other] = null;   // one hold can't be both
+      if (await save(change)) paintBoards(false);
+    };
+    app.querySelector("[data-picking]").onclick = (e) => {
+      const v = e.target.closest("button")?.dataset.v;
+      if (v) { state.picking = v; paintBoards(false); }
+    };
+    app.querySelector("[data-layouts]")?.addEventListener("click", (e) => {
+      if (e.target.dataset.v) { state.layout = Number(e.target.dataset.v); paintBoards(); }
+    });
+    // Hovering a hold on the heatmap says how many of the climbs you've sent use it.
+    const heatbox = document.getElementById("heatbox");
+    const ring = heatbox.querySelector(".hover"), tip = heatbox.querySelector(".tip");
+    heatbox.onmousemove = (e) => {
+      const hole = holeAt(e, heatbox);
+      ring.hidden = tip.hidden = !hole;
+      if (!hole) return;
+      ring.style.left = tip.style.left = `${hole[2] * 100}%`;
+      ring.style.top = tip.style.top = `${hole[3] * 100}%`;
+      tip.textContent = hole[4] ? `Used on ${hole[4]} ${hole[4] === 1 ? "climb" : "climbs"}` : "Not used yet";
+      tip.classList.toggle("below", hole[3] < 0.12);
+      tip.classList.toggle("left", hole[2] > 0.8);
+      tip.classList.toggle("right", hole[2] < 0.2);
+    };
+    heatbox.onmouseleave = () => { ring.hidden = tip.hidden = true; };
+    // Open on the layout that has the favorite hold, if there is one.
+    const start = favorites.favorite_hold || favorites.least_favorite_hold;
+    if (start && p.layouts.some((l) => l.id === start.layout_id)) state.layout = start.layout_id;
+  }
+
+  paintLog();
+  paintAngle();
+  paintBoards();
 }
 
 async function renderSession(id, refresh = true) {
