@@ -136,6 +136,20 @@ def draw_jug(image: Image.Image, left: float, top: float, width: float, height: 
     image.alpha_composite(layer, (round(left), round(top)))
 
 
+def draw_check(draw: ImageDraw.ImageDraw, x: float, top: float, height: float) -> float:
+    """A small accent-colored checkmark, the font has no glyph for one. `height` is
+    the cap height to match it against; top-left at (x, top). Returns the width drawn."""
+    stroke = max(3 * S, round(height * 0.16))
+    width = height * 0.95
+    points = [
+        (x, top + height * 0.58),
+        (x + height * 0.36, top + height * 0.92),
+        (x + width, top + height * 0.08),
+    ]
+    draw.line(points, fill=ACCENT, width=stroke, joint="curve")
+    return width
+
+
 def draw_stat(draw: ImageDraw.ImageDraw, y: float, label: str, value: str, theme: Theme,
               value_size: float = 150, accent_value: bool = False) -> float:
     """Strava-style stat: small label above a big value. Returns the bottom y."""
@@ -310,7 +324,7 @@ def render_board(summary: SessionSummary, theme: Theme, board: BoardRenderer | N
     climb = None
     if climb_uuid:
         climb = next((c for c in summary.climbs if c.climb_uuid == climb_uuid), None)
-    label = "Hardest Send"
+    label = "Sent"
     if climb is None:
         climb = summary.hardest
     elif climb is not summary.hardest:
@@ -322,13 +336,22 @@ def render_board(summary: SessionSummary, theme: Theme, board: BoardRenderer | N
     image = _canvas()
     draw = ImageDraw.Draw(image)
     if climb is None:
-        y = draw_stat(draw, u(100), "Hardest Send", "—", theme)
+        y = draw_stat(draw, u(100), "Sent", "—", theme)
         draw_logo(image, y + u(80), theme)
         return image
 
     label_font = font("medium", 40)
     y = u(100)
-    draw_text(draw, CX, y, label, label_font, theme.ink(0.95))
+    if label == "Sent":
+        cap = cap_height(label_font)
+        gap = u(14)
+        label_w = text_width(label, label_font)
+        total_w = label_w + gap + cap * 0.95
+        start_x = CX - total_w / 2
+        draw_text(draw, start_x, y, label, label_font, theme.ink(0.95), align="left")
+        draw_check(draw, start_x + label_w + gap, y, cap)
+    else:
+        draw_text(draw, CX, y, label, label_font, theme.ink(0.95))
     y += cap_height(label_font) + u(24)
     name, name_font = fit(climb.name, "semibold", 128, 940, 72)
     draw_text(draw, CX, y, name, name_font, theme.ink())
