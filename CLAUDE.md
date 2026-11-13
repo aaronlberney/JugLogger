@@ -43,6 +43,8 @@ Things most likely to need fixing on first contact with real data: product-size/
 
 More boards (Kilter via its new API, Moonboard), phone use at the gym (hosting or a PWA), progress over time, feed and social features, more graphics.
 
+**Outdoor climbing (Aaron's afterthought, Nov 2026, maybe later):** Mountain Project's public API was shut down around 2020 (after onX bought it) and scraping breaks its terms. The way in is the **tick CSV export** from Aaron's MP profile (date, route, grade, style, route type, pitches, length, location, URL, notes). Use **OpenBeta** (openbeta.io, free CC0 GraphQL API) for route and crag details and GPS. theCrag has an API but you have to apply for access. Ticks have a date but no time, so an outdoor "session" would be a crag day (one date, one area), not a timer window. There's no board graphic, and YDS/V grades need their own pyramid scales.
+
 ## Code map
 
 - `juglogger/__main__.py`: CLI. `server.py`: FastAPI app plus JSON API; the UI is `web/` (plain HTML/CSS/JS, no build step).
