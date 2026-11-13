@@ -403,16 +403,19 @@ def render_heatmap(summary: SessionSummary, theme: Theme, board: BoardRenderer |
     height = text_height
     if use:
         heat = board.render_heatmap(use[0], use[1], u(900), RED)
+        # Trim to the holds used, so the type sits in the middle of them (and of the
+        # cropped sticker) even when they are all on one side of the board.
+        heat = heat.crop(heat.getchannel("A").getbbox())
         height = max(height, heat.height)
         # Cut a thin gap in the holds around the type, so it reads over any shade.
         left = CX - heat.width // 2
         offset = (height - text_height) // 2
         letters = Image.new("L", heat.size, 0)
-        letters.paste(text.getchannel("A"), (-left, offset))
+        letters.paste(text.getchannel("A"), (-left, offset - (height - heat.height) // 2))
         gap = letters.filter(ImageFilter.GaussianBlur(u(HEAT_TEXT_GAP)))
         gap = gap.point(lambda v: max(0, min(255, (v - 24) * 12)))
         heat.putalpha(ImageChops.multiply(heat.getchannel("A"), ImageChops.invert(gap)))
-        image.alpha_composite(heat, (left, top))
+        image.alpha_composite(heat, (left, top + (height - heat.height) // 2))
     image.alpha_composite(text, (0, top + (height - text_height) // 2))
     draw_logo(image, top + height + u(72), theme)
     return image
