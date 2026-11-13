@@ -128,7 +128,8 @@ def cmd_doctor(args) -> int:
     print(f"✓ Logbook: {len(logbook['ascents'])} sends, {len(logbook['bids'])} attempt entries")
     rows = sorted(logbook["ascents"] + logbook["bids"], key=lambda r: r.get("climbed_at") or "")[-5:]
     print(f"  Your computer's time now: {datetime.now():%Y-%m-%d %H:%M:%S}")
-    print("  Latest entries (climbed_at should be your local time when you logged them):")
+    print("  Latest entries (climbed_at is converted from Tension's UTC and should match your")
+    print("  local time when you logged them; if it's off by whole hours, the UTC guess is wrong):")
     for row in rows:
         climb = board.climb(row["climb_uuid"])
         kind = "send   " if "difficulty" in row else "attempt"

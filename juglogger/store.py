@@ -1,15 +1,15 @@
 """JugLogger's own SQLite database: your board account, sessions, and a local copy
 of your logbook rows from the Tension API.
 
-All times are stored as local wall-clock time ("YYYY-MM-DD HH:MM:SS"), the same way
-the Tension app records when you climbed.
+All times are stored as local wall-clock time ("YYYY-MM-DD HH:MM:SS"). The Tension
+API sends UTC, so `tension.fetch_logbook` converts its times before they get here.
 """
 
 from __future__ import annotations
 
 import sqlite3
 from contextlib import contextmanager
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 TIME_FORMAT = "%Y-%m-%d %H:%M:%S"
@@ -66,6 +66,13 @@ def normalize_time(value: str) -> str:
         except ValueError:
             continue
     raise ValueError(f"Unrecognized time: {value!r}")
+
+
+def utc_to_local(value: str, tz=None) -> str:
+    """A UTC time with no zone attached (how the Tension API sends them) → this
+    computer's local wall-clock time (or `tz`'s), 'YYYY-MM-DD HH:MM:SS'."""
+    utc = datetime.strptime(normalize_time(value), TIME_FORMAT).replace(tzinfo=timezone.utc)
+    return utc.astimezone(tz).strftime(TIME_FORMAT)
 
 
 class Store:

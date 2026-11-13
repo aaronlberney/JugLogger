@@ -6,7 +6,7 @@ README.md has the user-facing setup and usage. This file holds the decisions and
 
 ## Current status (handoff from the first build session, Nov 2026)
 
-- The MVP is built and pushed: timer, live climb list, session summary, four share graphics, history, demo mode, CLI (`setup`, `doctor`, `serve`). 10 tests pass (`pytest`).
+- The MVP is built and pushed: timer, live climb list, session summary, four share graphics, history, demo mode, CLI (`setup`, `doctor`, `serve`). tests pass (`pytest`).
 - **It has never run against Aaron's real Tension account.** It was built in a cloud sandbox that couldn't reach Tension's servers, so the board database code and calibration were written against Tension's data format but only tested on fake data.
 - **Next step: get it running on Aaron's computer.** The first step is installing Python. Prefer **uv** (no admin password needed): `curl -LsSf https://astral.sh/uv/install.sh | sh`, then `uv python install 3.14`, then create a venv with that Python and run `pip install -e ".[dev]"`. Python 3.14 is preferred over 3.15, since some dependencies (pandas via boardlib, numpy, Pillow) may not have 3.15 wheels yet.
 - Then follow the testing plan below. **Aaron must type his Tension password himself** (`python -m juglogger setup` prompts for it). Never ask for it in chat or put it in a file.
@@ -18,11 +18,11 @@ README.md has the user-facing setup and usage. This file holds the decisions and
 3. `python -m juglogger doctor`. Review its output **together with** `data/calibration-mirror.png` and `data/calibration-spray.png`. Check that:
    - the TB2 Mirror and Spray layouts and the 12×12 size were found
    - the hold calibration matched at least 85% of holds (every red ring sits on a hold in the preview images)
-   - the `climbed_at` times of the latest entries match the computer's local time. Session windows compare `climbed_at` as local wall-clock time. If it turns out to be UTC, `summary.session_window` / `store.entries_between` need an offset.
+   - the `climbed_at` times of the latest entries match the computer's local time. The API sends UTC with no zone attached (Boardsesh, which syncs real Tension accounts, treats it as UTC), so `tension._to_local` converts it to local time at import and everything after that works in local wall-clock time. If doctor's times are off by whole hours, that assumption is wrong for this account: remove the conversion in `tension.fetch_logbook`.
 4. `python -m juglogger serve`, then **Log a past session** around an old session: check that the climbs, grades, tries and flashes are right.
 5. Live test: press Start, log 4–6 climbs in the Tension app (a flash, a send after several tries, an attempts-only climb, a mirrored climb on Mirror), check that they appear within about 20s, press Stop, and check the graphics.
 
-Things most likely to need fixing on first contact with real data: product-size/layout name matching in `boarddb.py` (`SIZE_12X12_RE`, `LAYOUT_KEYWORDS`), the `climbed_at` timezone, `attempt_id` vs `bid_count` meaning for tries (`summary._tries`), and calibration quality.
+Things most likely to need fixing on first contact with real data: product-size/layout name matching in `boarddb.py` (`SIZE_12X12_RE`, `LAYOUT_KEYWORDS`), the `climbed_at` timezone (now assumed UTC, see step 3), tries (`summary._tries` now uses `bid_count` as the count and `attempt_id == 1` as flash, matching Boardsesh), and calibration quality.
 
 ## Design decisions (Aaron's preferences, keep these)
 

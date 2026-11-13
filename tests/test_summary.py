@@ -58,3 +58,30 @@ def test_holds_and_mirror(board, climbs):
     assert holds and len(holds) == len(mirrored)
     assert all(abs(m.x + h.x) < 4 and abs(m.y - h.y) < 4 for m, h in zip(mirrored, holds))
     assert {h.role for h in holds} >= {"start", "finish"}
+
+
+def test_tries_from_bid_count():
+    from juglogger.summary import _tries
+    # attempt_id 1 is Tension's "Flash", whatever bid_count says.
+    assert _tries({"kind": "ascent", "attempt_id": 1, "bid_count": 3}) == 1
+    # Otherwise bid_count is the count; attempt_id is an id, not a count.
+    assert _tries({"kind": "ascent", "attempt_id": 2, "bid_count": 5}) == 5
+    assert _tries({"kind": "ascent", "attempt_id": None, "bid_count": None}) == 1
+    assert _tries({"kind": "ascent", "attempt_id": 2, "bid_count": "lots"}) == 1
+    assert _tries({"kind": "bid", "attempt_id": 1, "bid_count": 4}) == 4
+
+
+def test_tension_times_converted_from_utc():
+    from datetime import datetime, timezone
+    from zoneinfo import ZoneInfo
+
+    from juglogger.store import utc_to_local
+    from juglogger.tension import _to_local
+
+    la = ZoneInfo("America/Los_Angeles")
+    assert utc_to_local("2026-11-09 02:30:00.123456", la) == "2026-11-08 18:30:00"  # PST, UTC-8
+    assert utc_to_local("2026-07-01 19:00:00", la) == "2026-07-01 12:00:00"         # PDT, UTC-7
+    # Without a zone it uses this computer's.
+    local = datetime(2026, 11, 9, 2, 30, tzinfo=timezone.utc).astimezone().strftime("%Y-%m-%d %H:%M:%S")
+    row = _to_local({"uuid": "x", "climbed_at": "2026-11-09 02:30:00", "created_at": None})
+    assert row["climbed_at"] == local and row["created_at"] is None

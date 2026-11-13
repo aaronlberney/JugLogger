@@ -128,9 +128,19 @@ def session_window(session: dict, now: datetime | None = None) -> tuple[str, str
 
 
 def _tries(entry: dict) -> int:
-    if entry["kind"] == "ascent":
-        return max(1, int(entry.get("attempt_id") or entry.get("bid_count") or 1))
-    return max(1, int(entry.get("bid_count") or 1))
+    """`bid_count` is the number of tries on every entry. On a send, `attempt_id` is an
+    id into Tension's attempts table where 1 means "Flash", not a count. (This matches
+    how Boardsesh maps real Tension ascents.)"""
+    if entry["kind"] == "ascent" and _int(entry.get("attempt_id")) == 1:
+        return 1
+    return max(1, _int(entry.get("bid_count")) or 1)
+
+
+def _int(value) -> int | None:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
 
 
 def summarize(session: dict, entries: list[dict], board: BoardDB,

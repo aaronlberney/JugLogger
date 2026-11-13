@@ -10,6 +10,8 @@ from pathlib import Path
 
 import requests
 
+from .store import utc_to_local
+
 BOARD = "tension"
 BASE_SYNC_DATE = "1970-01-01 00:00:00.000000"
 
@@ -42,7 +44,18 @@ def fetch_logbook(token: str) -> dict[str, list[dict]]:
         if error.response is not None and error.response.status_code in (401, 403):
             raise AuthError("Your Tension session expired. Sign in again.") from error
         raise
-    return {"ascents": ascents, "bids": bids}
+    return {"ascents": [_to_local(row) for row in ascents], "bids": [_to_local(row) for row in bids]}
+
+
+def _to_local(row: dict) -> dict:
+    """The API's times are UTC with no zone attached ("2026-11-08 23:02:11"). The rest
+    of JugLogger works in local wall-clock time, so convert them here, once. (Boardsesh,
+    which syncs real Tension accounts, reads these times as UTC too.)"""
+    row = dict(row)
+    for key in ("climbed_at", "created_at"):
+        if row.get(key):
+            row[key] = utc_to_local(row[key])
+    return row
 
 
 def sync_board_database(database_path: Path, token: str | None) -> dict[str, int]:
