@@ -12,7 +12,7 @@ from datetime import datetime
 from functools import lru_cache
 from pathlib import Path
 
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageChops, ImageDraw, ImageFilter, ImageFont
 
 from ..boarddb import v_grade_rank
 from ..summary import ClimbResult, SessionSummary
@@ -24,6 +24,7 @@ CX = WIDTH * S // 2
 RED = (214, 40, 40)              # accent: #D62828
 FONTS = Path(__file__).resolve().parent.parent / "fonts"
 APP_NAME = "JUGLOGGER"
+HEAT_TEXT_GAP = 5              # clear space cut out of the heatmap holds around the type
 
 
 @dataclass(frozen=True)
@@ -221,20 +222,23 @@ def session_date(summary: SessionSummary) -> str:
     return started.strftime("%b %d").upper()
 
 
+def session_stats(summary: SessionSummary) -> list[tuple[str, str]]:
+    hardest = summary.hardest
+    if summary.send_count:
+        return [("Sends", str(summary.send_count)),
+                ("Top Grade", hardest.grade if hardest and hardest.grade else "—"),
+                ("Time", summary_duration(summary))]
+    return [("Climbs", str(len(summary.climbs))),
+            ("Attempts", str(summary.total_tries)),
+            ("Time", summary_duration(summary))]
+
+
 # The graphics
 
 def render_stats(summary: SessionSummary, theme: Theme, **_) -> Image.Image:
     image = _canvas()
     draw = ImageDraw.Draw(image)
-    hardest = summary.hardest
-    if summary.send_count:
-        stats = [("Sends", str(summary.send_count)),
-                 ("Top Grade", hardest.grade if hardest and hardest.grade else "—"),
-                 ("Time", summary_duration(summary))]
-    else:
-        stats = [("Climbs", str(len(summary.climbs))),
-                 ("Attempts", str(summary.total_tries)),
-                 ("Time", summary_duration(summary))]
+    stats = session_stats(summary)
     y = u(100)
     for index, (label, value) in enumerate(stats):
         y = draw_stat(draw, y, label, value, theme)
@@ -378,6 +382,42 @@ def render_board(summary: SessionSummary, theme: Theme, board: BoardRenderer | N
     return image
 
 
+def render_heatmap(summary: SessionSummary, theme: Theme, board: BoardRenderer | None = None, **_) -> Image.Image:
+    """The stats graphic with one more line, the number of holds used, set over a
+    heatmap of those holds."""
+    use = board.hold_use(summary.climbs) if board else None
+    stats = session_stats(summary)
+    if use:
+        stats.append(("Holds", str(len(use[1]))))
+    text = _canvas()
+    draw = ImageDraw.Draw(text)
+    mono = font("mono", 28)
+    draw_text(draw, CX, 0, session_date(summary), mono, theme.ink(0.85), tracking=1)
+    y = cap_height(mono) + u(56)
+    for label, value in stats:
+        y = draw_stat(draw, y, label, value, theme) + u(64)
+    text_height = y - u(64)
+
+    image = _canvas()
+    top = u(100)
+    height = text_height
+    if use:
+        heat = board.render_heatmap(use[0], use[1], u(900), RED)
+        height = max(height, heat.height)
+        # Cut a thin gap in the holds around the type, so it reads over any shade.
+        left = CX - heat.width // 2
+        offset = (height - text_height) // 2
+        letters = Image.new("L", heat.size, 0)
+        letters.paste(text.getchannel("A"), (-left, offset))
+        gap = letters.filter(ImageFilter.GaussianBlur(u(HEAT_TEXT_GAP)))
+        gap = gap.point(lambda v: max(0, min(255, (v - 24) * 12)))
+        heat.putalpha(ImageChops.multiply(heat.getchannel("A"), ImageChops.invert(gap)))
+        image.alpha_composite(heat, (left, top))
+    image.alpha_composite(text, (0, top + (height - text_height) // 2))
+    draw_logo(image, top + height + u(72), theme)
+    return image
+
+
 def summary_duration(summary: SessionSummary) -> str:
     from ..summary import format_duration
     return format_duration(summary.duration_seconds)
@@ -392,6 +432,7 @@ GRAPHICS = {
     "pyramid": ("Grade pyramid", render_pyramid),
     "list": ("Climb list", render_list),
     "board": ("Hardest send", render_board),
+    "heatmap": ("Hold heatmap", render_heatmap),
 }
 
 

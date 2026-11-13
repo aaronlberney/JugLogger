@@ -20,7 +20,7 @@ def test_full_flow(client):
     session = client.get(f"/api/sessions/{created['id']}?refresh=1").json()
     assert session["climb_count"] > 0 and session["duration"] == "1h 15m"
 
-    for kind in ("stats", "pyramid", "list", "board"):
+    for kind in ("stats", "pyramid", "list", "board", "heatmap"):
         for theme in ("light", "dark"):
             for crop in ("true", "false"):
                 response = client.get(f"/api/sessions/{created['id']}/graphics/{kind}.png?theme={theme}&crop={crop}")
@@ -40,7 +40,7 @@ def test_timer_and_empty_session(client):
     assert client.post("/api/sessions/start").json() == started  # one at a time
     stopped = client.post(f"/api/sessions/{started['id']}/stop").json()
     assert stopped["active"] is False
-    for kind in ("stats", "pyramid", "list", "board"):
+    for kind in ("stats", "pyramid", "list", "board", "heatmap"):
         assert client.get(f"/api/sessions/{started['id']}/graphics/{kind}.png").status_code == 200
 
 

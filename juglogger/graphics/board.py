@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import json
 import logging
+import math
 from functools import lru_cache
 from pathlib import Path
 
@@ -26,6 +27,18 @@ RIM_WIDTH = 0.0035        # dark rim around each hold, as a fraction of the boar
 RIM_COLOR = (14, 15, 18)
 RIM_ALPHA_LIGHT = 0.4    # rim strength under white type (dark photos)
 RIM_ALPHA_DARK = 0.85     # rim strength under black type (bright photos)
+
+
+HEAT_FULL = 10            # uses at which a heatmap hold reaches its darkest shade, in any session
+HEAT_DEEP = (74, 8, 12)   # that darkest shade
+
+
+def heat_color(color: tuple[int, int, int], count: int) -> tuple[int, int, int]:
+    """The heatmap shade for a hold used `count` times: `color` at one use, HEAT_DEEP
+    at HEAT_FULL uses or more. It depends on the count alone, never on the rest of the
+    session, and steps are larger at low counts, where most holds are."""
+    t = min(1.0, math.log(max(1, count)) / math.log(HEAT_FULL))
+    return tuple(round(a + (b - a) * t) for a, b in zip(color, HEAT_DEEP))
 
 
 def asset_name(layout: Layout) -> str | None:
@@ -248,6 +261,36 @@ class BoardRenderer:
         glow.putalpha(ImageChops.multiply(glow.getchannel("A"), ImageChops.invert(lit_mask)))
         out = Image.alpha_composite(out, glow)
         return Image.alpha_composite(out, outlines)
+
+    def hold_use(self, climbs) -> tuple[int, dict[tuple[float, float], int]] | None:
+        """How many of the session's climbs use each hold, for the layout with the most
+        climbs: (layout id, {(x, y): count}). `climbs` need climb_uuid and is_mirror."""
+        layouts: dict[int, dict[tuple[float, float], int]] = {}
+        for entry in climbs:
+            climb = self.db.climb(entry.climb_uuid)
+            if not climb or climb.layout_id is None or not self.layout_image(climb.layout_id):
+                continue
+            use = layouts.setdefault(climb.layout_id, {})
+            for spot in {(hold.x, hold.y) for hold in self.db.holds(climb, mirrored=entry.is_mirror)}:
+                use[spot] = use.get(spot, 0) + 1
+        if not layouts:
+            return None
+        return max(layouts.items(), key=lambda item: sum(item[1].values()))
+
+    def render_heatmap(self, layout_id: int, use: dict[tuple[float, float], int], width: int,
+                       color: tuple[int, int, int]) -> Image.Image:
+        """Only the holds in `use`, each a flat, solid fill of its own shape: `color`
+        for a hold used once, darkening with every further use. The scale is fixed
+        (see heat_color), so a shade means the same count in every session."""
+        image = self.layout_image(layout_id)[0]
+        scale = width / image.width
+        out = Image.new("RGBA", (width, round(image.height * scale)), (0, 0, 0, 0))
+        for (x, y), count in sorted(use.items(), key=lambda item: item[1]):
+            shape, (left, top) = self.hold_shape(layout_id, x, y)
+            size = (max(1, round(shape.width * scale)), max(1, round(shape.height * scale)))
+            out.paste(heat_color(color, count) + (255,), (round(left * scale), round(top * scale)),
+                      shape.resize(size, Image.LANCZOS))
+        return out
 
     def calibration_preview(self, layout_id: int, width: int = 1200) -> Image.Image | None:
         """Every database hole ringed on the layout image, to check the alignment by eye."""

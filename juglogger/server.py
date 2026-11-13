@@ -250,7 +250,7 @@ def create_app(data_dir: Path | None = None, demo_mode: bool | None = None) -> F
             raise HTTPException(404, "No such graphic")
         session = get_session(session_id)
         png = render_graphic(kind, ctx.summary(session), theme=theme, crop=crop,
-                             board=ctx.renderer() if kind == "board" else None, climb_uuid=climb,
+                             board=ctx.renderer() if kind in ("board", "heatmap") else None, climb_uuid=climb,
                              lit_only=holds == "lit")
         headers = {"Cache-Control": "no-store"}
         if download:
