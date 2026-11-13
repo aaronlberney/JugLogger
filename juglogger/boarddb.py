@@ -229,9 +229,15 @@ class BoardDB:
         return holds
 
     def layout_hole_positions(self, layout_id: int) -> list[tuple[float, float]]:
+        """Holes actually placed on a layout. Skips optional "Expansion" hold sets
+        (add-on kits most boards, including this one, don't have) when the database
+        has a `sets` table to tell them apart."""
+        exclude_expansion = "sets" in self.tables()
+        join = "JOIN sets ON sets.id = placements.set_id" if exclude_expansion else ""
+        condition = "AND sets.name NOT LIKE '%Expansion%'" if exclude_expansion else ""
         rows = self._query(
-            "SELECT holes.x, holes.y FROM placements JOIN holes ON holes.id = placements.hole_id "
-            "WHERE placements.layout_id = ?",
+            f"SELECT holes.x, holes.y FROM placements JOIN holes ON holes.id = placements.hole_id "
+            f"{join} WHERE placements.layout_id = ? {condition}",
             (layout_id,),
         )
         return [(row["x"], row["y"]) for row in rows]

@@ -13,7 +13,7 @@ All are transparent PNGs with white (or black) type and a dark red accent:
 | **Stats** | Sends, top grade and session time, plus a mini grade pyramid, in Strava's overlay format |
 | **Grade pyramid** | Sends per V grade, hardest on top |
 | **Climb list** | Every climb with its grade, angle, and tries/flash/project |
-| **Hardest send** | The climb lit up on the TB2 Mirror or Spray 12×12 layout. The holds are colorless on a transparent background, with the climb's holds ringed in their start/hand/finish/foot colors. Shows name, grade, angle and tries. You can pick any climb from the session. |
+| **Hardest send** | The climb lit up on the TB2 Mirror or Spray 12×12 layout. The holds keep their real colors on a transparent background (the unlit ones with a thin dark rim so they read on any photo), with the climb's holds outlined in their start/hand/finish/foot colors. Shows name, grade, angle and tries. You can pick any climb from the session. |
 
 Each graphic comes in two formats: **Sticker**, cropped tight to the content (copy it and paste it into an Instagram story), and **Story**, a full 1080×1920 frame. In the app you can preview each one on a sky, dark, light or your own photo backdrop.
 

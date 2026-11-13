@@ -18,7 +18,7 @@ def test_layout_images_are_transparent(name):
         assert alpha[y, x] == 0
     assert (alpha == 0).mean() > 0.4          # mostly see-through between holds
     rgb = np.asarray(image.convert("RGB"), int)
-    assert (np.ptp(rgb, axis=2) <= 1).all()   # colorless
+    assert rgb[alpha == 255].mean() > 120     # light holds, in their real colors
     assert len(json.loads((ASSETS / f"{name}.json").read_text())["holds"]) > 350
 
 

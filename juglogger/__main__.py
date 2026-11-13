@@ -109,6 +109,9 @@ def cmd_doctor(args) -> int:
         print(f"  {'✓' if good else '✗'} holds lined up with the image: {calibration.matched}/{calibration.total} "
               f"matched, off by {calibration.rms_px:.1f}px on average")
         print(f"    check by eye: {preview} (every red ring should sit on a hold)")
+        outlines = root / f"outlines-{layout.name.split()[-1].lower()}.png"
+        renderer.outline_preview(layout.id).convert("RGB").save(outlines)
+        print(f"    hold outlines: {outlines} (each hold should have its own outline)")
     print(f"✓ Grades: {', '.join(sorted(set(filter(None, map(board.v_grade, board.grade_names)))))}")
 
     store = Store(root / "juglogger.sqlite3")
